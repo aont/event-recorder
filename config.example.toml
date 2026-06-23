@@ -1,0 +1,70 @@
+[paths]
+# Relative paths are resolved under work_dir unless work_dir itself is relative,
+# in which case it is resolved relative to this TOML file.
+work_dir = "./var/recording-r4"
+source_hls_dir = "source-hls"
+recordings_dir = "recordings"
+frame_storage_dir = "frames"
+
+[rtsp]
+url = "rtsp://example.local/stream"
+transport = "tcp"
+# Extra ffmpeg input options before -i.
+input_args = []
+
+[hls]
+ffmpeg_bin = "ffmpeg"
+playlist_name = "live.m3u8"
+segment_pattern = "segment_%010d.ts"
+segment_seconds = 2.0
+retain_segments = 10
+delete_threshold = 2
+start_number_source = "generic"
+hls_flags = ["delete_segments", "program_date_time", "temp_file"]
+loglevel = "info"
+# Default assumes the RTSP stream is H.264/AAC-compatible and can be muxed into HLS by copy.
+# Replace with transcode args if your camera codec/container requires it.
+stream_args = ["-map", "0:v:0", "-map", "0:a?", "-c", "copy"]
+output_args = []
+clean_source_on_start = true
+
+[frames]
+# Tc: extract one frame every this many seconds from each segment.
+tc_seconds = 1.0
+# Tb: keep/extend recording until frame timestamp + this many seconds after a target detection.
+tb_seconds = 10.0
+jpeg_quality = 3
+save_frames = false
+delete_frames_for_deleted_segments = true
+skip_existing_segments_on_start = false
+
+[ai]
+socket_path = "/tmp/recording-r4-proc2.sock"
+target_objects = ["cat"]
+score_threshold = 0.4
+timeout_seconds = 20.0
+max_message_bytes = 20971520
+
+[recording]
+poll_interval_seconds = 0.5
+convert_to_mp4 = true
+mp4_filename = "recording.mp4"
+mp4_args = ["-c", "copy", "-movflags", "+faststart"]
+
+[slack]
+enabled = false
+bot_token_env = "SLACK_BOT_TOKEN"
+channel_id_env = "SLACK_CHANNEL_ID"
+title_prefix = "Recording"
+initial_comment = "Recording uploaded."
+# You may set bot_token/channel_id here instead of env vars, but env vars are safer.
+# bot_token = "xoxb-..."
+# channel_id = "C0123456789"
+
+[proc2]
+model_path = "./models/efficientdet_lite0.tflite"
+# Optional overrides; defaults are inherited from [ai].
+# socket_path = "/tmp/recording-r4-proc2.sock"
+# target_objects = ["cat"]
+# score_threshold = 0.4
+max_results = -1

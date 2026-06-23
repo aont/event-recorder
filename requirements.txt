@@ -1,0 +1,4 @@
+mediapipe>=0.10
+numpy>=1.24
+Pillow>=10.0
+slack-sdk>=3.27
