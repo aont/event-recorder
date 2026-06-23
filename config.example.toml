@@ -40,6 +40,9 @@ jpeg_quality = 3
 save_frames = false
 delete_frames_for_deleted_segments = true
 skip_existing_segments_on_start = false
+# By default, routine m3u8-loader progress logs are not emitted.
+# Set true to show segment wakeups, extraction starts/completions, and frame cleanup.
+echo_m3u8_progress_logs = false
 
 [ai]
 socket_path = "/tmp/recording-r4-proc2.sock"

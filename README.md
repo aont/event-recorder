@@ -115,7 +115,17 @@ recording-r4-proc1 --config config.toml
 -hls_flags delete_segments+program_date_time+temp_file
 ```
 
-The playlist is treated as the source of truth. FFmpeg stdout/stderr are still drained and re-emitted with timestamped prefixes, and segment-like `Opening ...` log lines wake the m3u8 loader.
+The playlist is treated as the source of truth. FFmpeg stdout/stderr are still drained, and segment-like `Opening ...` log lines wake the m3u8 loader. By default, these ffmpeg logs are not echoed; set `[hls].echo_ffmpeg_logs = true` for debugging.
+
+
+### m3u8-loader progress logging
+
+By default, routine `m3u8-loader` progress logs are suppressed. This includes segment log wakeups, frame extraction start/completion messages, skipped-existing-segment messages, and frame-cleanup messages. Warnings, errors, and target-detection messages remain visible. To debug loader progress, set:
+
+```toml
+[frames]
+echo_m3u8_progress_logs = true
+```
 
 ### m3u8 loading and frame extraction
 

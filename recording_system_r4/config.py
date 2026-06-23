@@ -126,6 +126,7 @@ class FrameConfig:
     save_frames: bool = False
     delete_frames_for_deleted_segments: bool = True
     skip_existing_segments_on_start: bool = False
+    echo_m3u8_progress_logs: bool = False
 
     @classmethod
     def from_toml(cls, data: Mapping[str, Any]) -> "FrameConfig":
@@ -140,6 +141,9 @@ class FrameConfig:
             ),
             skip_existing_segments_on_start=bool(
                 data.get("skip_existing_segments_on_start", default.skip_existing_segments_on_start)
+            ),
+            echo_m3u8_progress_logs=bool(
+                data.get("echo_m3u8_progress_logs", default.echo_m3u8_progress_logs)
             ),
         )
 

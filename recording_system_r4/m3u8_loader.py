@@ -43,6 +43,10 @@ class M3u8LoadingTask:
         self.last_processed_sequence: int | None = None
         self.frames_by_segment: dict[int, list[ExtractedFrame]] = {}
 
+    def _progress(self, message: str) -> None:
+        if self.config.frames.echo_m3u8_progress_logs:
+            print(f"{utc_stamp()} m3u8-loader: {message}", file=sys.stderr, flush=True)
+
     async def run(self) -> None:
         while True:
             got_event = False
@@ -52,11 +56,7 @@ class M3u8LoadingTask:
                     timeout=self.config.recording.poll_interval_seconds,
                 )
                 got_event = True
-                print(
-                    f"{utc_stamp()} m3u8-loader: segment log event: {event.path}",
-                    file=sys.stderr,
-                    flush=True,
-                )
+                self._progress(f"segment log event: {event.path}")
             except asyncio.TimeoutError:
                 pass
 
@@ -75,12 +75,7 @@ class M3u8LoadingTask:
         if self.last_processed_sequence is None:
             if self.config.frames.skip_existing_segments_on_start:
                 self.last_processed_sequence = playlist.last_sequence
-                print(
-                    f"{utc_stamp()} m3u8-loader: skipping existing source segments through seq "
-                    f"{self.last_processed_sequence}",
-                    file=sys.stderr,
-                    flush=True,
-                )
+                self._progress(f"skipping existing source segments through seq {self.last_processed_sequence}")
                 return
             self.last_processed_sequence = playlist.media_sequence - 1
 
@@ -125,11 +120,7 @@ class M3u8LoadingTask:
                     seq_dir.rmdir()
                 except OSError:
                     pass
-            print(
-                f"{utc_stamp()} m3u8-loader: deleted frames for removed segment seq={seq}",
-                file=sys.stderr,
-                flush=True,
-            )
+            self._progress(f"deleted frames for removed segment seq={seq}")
 
     async def _process_segment(self, segment: HlsSegment) -> None:
         try:
@@ -146,11 +137,9 @@ class M3u8LoadingTask:
             )
             return
 
-        print(
-            f"{utc_stamp()} m3u8-loader: extracting frames from seq={segment.sequence} "
-            f"duration={segment.duration:.3f}s uri={segment.uri}",
-            file=sys.stderr,
-            flush=True,
+        self._progress(
+            f"extracting frames from seq={segment.sequence} "
+            f"duration={segment.duration:.3f}s uri={segment.uri}"
         )
         try:
             images = await extract_jpeg_frames(
@@ -186,11 +175,7 @@ class M3u8LoadingTask:
             frames.append(frame)
 
         self.frames_by_segment[segment.sequence] = frames
-        print(
-            f"{utc_stamp()} m3u8-loader: extracted {len(frames)} frames from seq={segment.sequence}",
-            file=sys.stderr,
-            flush=True,
-        )
+        self._progress(f"extracted {len(frames)} frames from seq={segment.sequence}")
 
         for frame in frames:
             await self._analyze_frame(frame)
