@@ -1,4 +1,4 @@
-# Recording System r4
+# Event Recorder
 
 Single-command implementation:
 
@@ -114,13 +114,6 @@ After optional `pip install .`, the console script is also available:
 
 ```bash
 myrecorder --config config.toml
-```
-
-The previous commands are removed:
-
-```text
-recording-r4-proc1  removed; use myrecorder
-recording-r4-proc2  removed
 ```
 
 ## Behavior
