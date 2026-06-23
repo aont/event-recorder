@@ -1,5 +1,7 @@
 # Event Recorder
 
+A Python RTSP camera recorder that converts streams to HLS, detects target objects with MediaPipe EfficientDet, and records event clips. When an event is detected, it can capture video retroactively from before the detection time, convert clips to MP4, and optionally upload them to Slack.
+
 Single-command implementation:
 
 - `myrecorder`: RTSP → HLS with `asyncio.subprocess`, m3u8 loading, frame extraction, AI trigger handling, HLS clip capture, MP4 conversion, optional Slack upload.
