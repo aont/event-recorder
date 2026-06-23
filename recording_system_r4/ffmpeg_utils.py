@@ -6,7 +6,7 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Awaitable, Callable, Sequence
+from typing import Awaitable, Callable, TextIO, Sequence
 
 from .config import AppConfig
 
@@ -24,7 +24,7 @@ async def pump_stream(
     *,
     process_name: str,
     stream_name: str,
-    output,
+    output: TextIO | None,
     line_callback: LineCallback | None = None,
 ) -> None:
     if stream is None:
@@ -34,7 +34,8 @@ async def pump_stream(
         if not raw:
             return
         text = raw.decode("utf-8", errors="replace").rstrip("\r\n")
-        print(f"{utc_stamp()} {process_name} {stream_name}: {text}", file=output, flush=True)
+        if output is not None:
+            print(f"{utc_stamp()} {process_name} {stream_name}: {text}", file=output, flush=True)
         if line_callback is not None:
             result = line_callback(text)
             if asyncio.iscoroutine(result):
@@ -120,7 +121,7 @@ class FfmpegHlsTask:
                 self._proc.stdout,
                 process_name="ffmpeg",
                 stream_name="stdout",
-                output=sys.stdout,
+                output=sys.stdout if self.config.hls.echo_ffmpeg_logs else None,
                 line_callback=self._handle_log_line,
             )
         )
@@ -129,7 +130,7 @@ class FfmpegHlsTask:
                 self._proc.stderr,
                 process_name="ffmpeg",
                 stream_name="stderr",
-                output=sys.stderr,
+                output=sys.stderr if self.config.hls.echo_ffmpeg_logs else None,
                 line_callback=self._handle_log_line,
             )
         )
@@ -217,6 +218,7 @@ async def run_ffmpeg_with_prefixed_logs(
     *,
     process_name: str,
     cwd: Path | None = None,
+    echo_logs: bool = False,
 ) -> int:
     print(f"{utc_stamp()} {process_name}: starting: {' '.join(map(str, cmd))}", file=sys.stderr, flush=True)
     proc = await asyncio.create_subprocess_exec(
@@ -226,10 +228,10 @@ async def run_ffmpeg_with_prefixed_logs(
         stderr=asyncio.subprocess.PIPE,
     )
     stdout_task = asyncio.create_task(
-        pump_stream(proc.stdout, process_name=process_name, stream_name="stdout", output=sys.stdout)
+        pump_stream(proc.stdout, process_name=process_name, stream_name="stdout", output=sys.stdout if echo_logs else None)
     )
     stderr_task = asyncio.create_task(
-        pump_stream(proc.stderr, process_name=process_name, stream_name="stderr", output=sys.stderr)
+        pump_stream(proc.stderr, process_name=process_name, stream_name="stderr", output=sys.stderr if echo_logs else None)
     )
     try:
         returncode = await proc.wait()

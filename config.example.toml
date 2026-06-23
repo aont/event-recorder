@@ -22,6 +22,9 @@ delete_threshold = 2
 start_number_source = "generic"
 hls_flags = ["delete_segments", "program_date_time", "temp_file"]
 loglevel = "info"
+# By default, ffmpeg stdout/stderr are consumed internally but not echoed to this process' stdout/stderr.
+# Set true for debugging ffmpeg HLS/conversion output.
+echo_ffmpeg_logs = false
 # Default assumes the RTSP stream is H.264/AAC-compatible and can be muxed into HLS by copy.
 # Replace with transcode args if your camera codec/container requires it.
 stream_args = ["-map", "0:v:0", "-map", "0:a?", "-c", "copy"]

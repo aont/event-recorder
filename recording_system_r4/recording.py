@@ -277,7 +277,12 @@ class HlsRecordingTask:
             *self.config.recording.mp4_args,
             str(output_path),
         ]
-        rc = await run_ffmpeg_with_prefixed_logs(cmd, process_name="ffmpeg-convert", cwd=state.destination_dir)
+        rc = await run_ffmpeg_with_prefixed_logs(
+            cmd,
+            process_name="ffmpeg-convert",
+            cwd=state.destination_dir,
+            echo_logs=self.config.hls.echo_ffmpeg_logs,
+        )
         if rc != 0:
             raise RuntimeError(f"MP4 conversion failed with ffmpeg exit code {rc}")
         return output_path

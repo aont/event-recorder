@@ -89,6 +89,7 @@ class HlsConfig:
     start_number_source: str = "generic"
     hls_flags: list[str] = field(default_factory=lambda: ["delete_segments", "program_date_time", "temp_file"])
     loglevel: str = "info"
+    echo_ffmpeg_logs: bool = False
     stream_args: list[str] = field(default_factory=lambda: ["-map", "0:v:0", "-map", "0:a?", "-c", "copy"])
     output_args: list[str] = field(default_factory=list)
     clean_source_on_start: bool = True
@@ -106,6 +107,7 @@ class HlsConfig:
             start_number_source=str(data.get("start_number_source", default.start_number_source)),
             hls_flags=_list(data.get("hls_flags"), default.hls_flags),
             loglevel=str(data.get("loglevel", default.loglevel)),
+            echo_ffmpeg_logs=bool(data.get("echo_ffmpeg_logs", default.echo_ffmpeg_logs)),
             stream_args=_list(data.get("stream_args"), default.stream_args),
             output_args=_list(data.get("output_args"), default.output_args),
             clean_source_on_start=bool(data.get("clean_source_on_start", default.clean_source_on_start)),

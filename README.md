@@ -201,3 +201,13 @@ UTF-8 JSON payload
 - The lightweight m3u8 parser covers the tags this system emits and consumes. It is not a full RFC 8216 parser.
 - Hard links require source and destination to be on the same filesystem. The fallback copy is included to avoid losing recordings when deployment paths cross filesystem boundaries.
 - `proc1` cleans `[paths].source_hls_dir` on startup by default. Disable with `[hls].clean_source_on_start = false` if you need to preserve that directory.
+
+
+## FFmpeg log output
+
+By default, `proc1` consumes ffmpeg stdout/stderr internally but does not echo ffmpeg log lines to the tool process stdout/stderr. This keeps runtime output quiet while still allowing segment-addition detection from ffmpeg logs. To debug ffmpeg output, set:
+
+```toml
+[hls]
+echo_ffmpeg_logs = true
+```
