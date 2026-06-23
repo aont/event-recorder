@@ -15,4 +15,4 @@ dependencies = [
 ]
 
 [project.scripts]
-myrecorder = "myrecorder.proc1:main"
+myrecorder = "myrecorder.app:main"

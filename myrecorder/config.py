@@ -263,7 +263,7 @@ class AppConfig:
     def source_segment_pattern_path(self) -> Path:
         return self.paths.source_hls_dir / self.hls.segment_pattern
 
-    def validate_proc1(self) -> None:
+    def validate_app(self) -> None:
         if not self.rtsp.url or self.rtsp.url.startswith("rtsp://example"):
             raise ValueError("[rtsp].url must be set to a real RTSP URL")
         if self.frames.tc_seconds <= 0:

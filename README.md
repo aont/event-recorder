@@ -18,7 +18,7 @@ myrecorder/
   ai_client.py           asyncio facade over ProcessPoolExecutor
   m3u8_loader.py         source playlist loader and frame analyzer
   recording.py           triggered HLS capture, MP4 conversion, Slack upload
-  proc1.py               myrecorder entrypoint
+  app.py                 myrecorder entrypoint
 config.example.toml
 requirements.txt
 pyproject.toml

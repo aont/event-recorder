@@ -20,7 +20,7 @@ def clean_source_hls_dir(path: Path) -> None:
             shutil.rmtree(child)
         else:
             child.unlink()
-    print(f"{utc_stamp()} proc1: cleaned source HLS dir {path}", file=sys.stderr, flush=True)
+    print(f"{utc_stamp()} app: cleaned source HLS dir {path}", file=sys.stderr, flush=True)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -32,7 +32,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 async def amain(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     config = AppConfig.from_file(args.config)
-    config.validate_proc1()
+    config.validate_app()
     config.ensure_directories()
 
     if config.hls.clean_source_on_start:

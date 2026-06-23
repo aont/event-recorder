@@ -12,7 +12,7 @@ from .ai_worker import analyze_frame_in_worker, init_ai_worker
 
 
 class AiClient:
-    """Async proc1-side AI facade backed by ProcessPoolExecutor workers."""
+    """Async app-side AI facade backed by ProcessPoolExecutor workers."""
 
     def __init__(
         self,

@@ -1,4 +1,4 @@
-from .proc1 import main
+from .app import main
 
 if __name__ == "__main__":
     main()

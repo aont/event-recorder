@@ -109,7 +109,7 @@ class FfmpegHlsTask:
 
     async def run(self) -> int:
         cmd = self.command()
-        print(f"{utc_stamp()} proc1: starting ffmpeg HLS: {' '.join(cmd)}", file=sys.stderr, flush=True)
+        print(f"{utc_stamp()} app: starting ffmpeg HLS: {' '.join(cmd)}", file=sys.stderr, flush=True)
         self._proc = await asyncio.create_subprocess_exec(
             *cmd,
             cwd=str(self.config.paths.source_hls_dir),
@@ -137,7 +137,7 @@ class FfmpegHlsTask:
         try:
             returncode = await self._proc.wait()
             await asyncio.gather(stdout_task, stderr_task, return_exceptions=True)
-            print(f"{utc_stamp()} proc1: ffmpeg HLS exited with code {returncode}", file=sys.stderr, flush=True)
+            print(f"{utc_stamp()} app: ffmpeg HLS exited with code {returncode}", file=sys.stderr, flush=True)
             return returncode
         finally:
             for task in (stdout_task, stderr_task):
