@@ -148,7 +148,7 @@ If there is no active capture loop, proc1 starts one.
 
 The recording task:
 
-1. Creates a new directory under `[paths].recordings_dir`.
+1. Creates a new timestamped directory under `[paths].recordings_dir`. By default, the timestamp uses the host process' local timezone and includes its numeric UTC offset.
 2. Hard-links current source segments into it. If hard-linking fails across filesystems, it falls back to `shutil.copy2` and logs a warning.
 3. Copies the current m3u8 snapshot without `#EXT-X-ENDLIST`.
 4. Polls the source m3u8 and appends new segment entries to the destination m3u8.
@@ -167,6 +167,21 @@ To keep uploaded recording directories on disk:
 ```toml
 [recording]
 delete_dir_after_slack_upload = false
+```
+
+### Timestamped recording names
+
+Recording directory names are generated as:
+
+```text
+rec_YYYYMMDDTHHMMSS.ffffff+ZZZZ_NNNN
+```
+
+By default, `YYYYMMDDTHHMMSS` is based on the host process' local timezone, for example `+0900` on a machine configured for Japan Standard Time. To use the previous UTC filename form ending in `Z`:
+
+```toml
+[recording]
+use_local_time_for_filenames = false
 ```
 
 ## AF_UNIX protocol

@@ -17,7 +17,11 @@ from .hls import HlsPlaylist, HlsSegment, append_lines, load_m3u8, strip_endlist
 from .slack_upload import upload_file_to_slack
 
 
-def _safe_timestamp(dt: datetime) -> str:
+def _safe_timestamp(dt: datetime, *, use_local_time: bool) -> str:
+    if use_local_time:
+        # datetime.astimezone() with no argument uses the host process' local timezone.
+        # Keep the numeric UTC offset in the filename so local-time names are unambiguous.
+        return dt.astimezone().strftime("%Y%m%dT%H%M%S.%f%z")
     return dt.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
 
 
@@ -167,7 +171,11 @@ class HlsRecordingTask:
 
     def _create_destination(self, playlist: HlsPlaylist) -> RecordingState:
         now = datetime.now(timezone.utc)
-        destination_dir = self.config.paths.recordings_dir / f"rec_{_safe_timestamp(now)}_{self.recording_id:04d}"
+        timestamp = _safe_timestamp(
+            now,
+            use_local_time=self.config.recording.use_local_time_for_filenames,
+        )
+        destination_dir = self.config.paths.recordings_dir / f"rec_{timestamp}_{self.recording_id:04d}"
         destination_dir.mkdir(parents=True, exist_ok=False)
         destination_playlist = destination_dir / self.config.hls.playlist_name
 

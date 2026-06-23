@@ -174,6 +174,7 @@ class RecordingConfig:
     convert_to_mp4: bool = True
     mp4_filename: str = "recording.mp4"
     mp4_args: list[str] = field(default_factory=lambda: ["-c", "copy", "-movflags", "+faststart"])
+    use_local_time_for_filenames: bool = True
     delete_dir_after_slack_upload: bool = True
 
     @classmethod
@@ -184,6 +185,9 @@ class RecordingConfig:
             convert_to_mp4=bool(data.get("convert_to_mp4", default.convert_to_mp4)),
             mp4_filename=str(data.get("mp4_filename", default.mp4_filename)),
             mp4_args=_list(data.get("mp4_args"), default.mp4_args),
+            use_local_time_for_filenames=bool(
+                data.get("use_local_time_for_filenames", default.use_local_time_for_filenames)
+            ),
             delete_dir_after_slack_upload=bool(
                 data.get("delete_dir_after_slack_upload", default.delete_dir_after_slack_upload)
             ),
