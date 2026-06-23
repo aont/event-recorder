@@ -135,7 +135,28 @@ class HlsRecordingTask:
         mp4_path = await self._convert_to_mp4(state)
         if mp4_path is not None:
             title = f"{self.config.slack.title_prefix} {state.destination_dir.name}"
-            await upload_file_to_slack(self.config.slack, mp4_path, title=title)
+            uploaded = await upload_file_to_slack(self.config.slack, mp4_path, title=title)
+            if uploaded and self.config.recording.delete_dir_after_slack_upload:
+                self._delete_recording_dir_after_upload(state.destination_dir)
+
+    def _delete_recording_dir_after_upload(self, destination_dir: Path) -> None:
+        try:
+            shutil.rmtree(destination_dir)
+        except FileNotFoundError:
+            return
+        except Exception as exc:
+            print(
+                f"{utc_stamp()} recording: warning: uploaded recording directory cleanup failed "
+                f"for {destination_dir}: {exc!r}",
+                file=sys.stderr,
+                flush=True,
+            )
+            return
+        print(
+            f"{utc_stamp()} recording: deleted uploaded recording directory {destination_dir}",
+            file=sys.stderr,
+            flush=True,
+        )
 
     async def _wait_for_source_playlist(self) -> HlsPlaylist:
         while True:
@@ -286,3 +307,4 @@ class HlsRecordingTask:
         if rc != 0:
             raise RuntimeError(f"MP4 conversion failed with ffmpeg exit code {rc}")
         return output_path
+

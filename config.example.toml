@@ -56,6 +56,9 @@ poll_interval_seconds = 0.5
 convert_to_mp4 = true
 mp4_filename = "recording.mp4"
 mp4_args = ["-c", "copy", "-movflags", "+faststart"]
+# Delete the per-recording directory, including copied HLS segments and m3u8, after a successful Slack upload.
+# This is only applied when Slack upload actually succeeds.
+delete_dir_after_slack_upload = true
 
 [slack]
 enabled = false

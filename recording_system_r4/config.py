@@ -174,6 +174,7 @@ class RecordingConfig:
     convert_to_mp4: bool = True
     mp4_filename: str = "recording.mp4"
     mp4_args: list[str] = field(default_factory=lambda: ["-c", "copy", "-movflags", "+faststart"])
+    delete_dir_after_slack_upload: bool = True
 
     @classmethod
     def from_toml(cls, data: Mapping[str, Any]) -> "RecordingConfig":
@@ -183,6 +184,9 @@ class RecordingConfig:
             convert_to_mp4=bool(data.get("convert_to_mp4", default.convert_to_mp4)),
             mp4_filename=str(data.get("mp4_filename", default.mp4_filename)),
             mp4_args=_list(data.get("mp4_args"), default.mp4_args),
+            delete_dir_after_slack_upload=bool(
+                data.get("delete_dir_after_slack_upload", default.delete_dir_after_slack_upload)
+            ),
         )
 
 

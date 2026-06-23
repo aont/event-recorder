@@ -160,6 +160,19 @@ The recording task:
 5. Ends the destination playlist with `#EXT-X-ENDLIST` after the copied segment timeline reaches the current end time.
 6. Converts the captured HLS into MP4 with ffmpeg when `[recording].convert_to_mp4 = true`.
 7. Uploads the MP4 to Slack when `[slack].enabled = true` and credentials are configured.
+8. Deletes the per-recording directory, including copied segments and m3u8, after a successful Slack upload when `[recording].delete_dir_after_slack_upload = true` (default).
+
+
+### Uploaded recording directory cleanup
+
+By default, after a successful Slack upload, proc1 deletes the per-recording directory under `[paths].recordings_dir`. This removes the copied HLS playlist, hard-linked/copied segments, and generated MP4. Cleanup is not performed when Slack is disabled, credentials are missing, upload fails, or MP4 conversion fails.
+
+To keep uploaded recording directories on disk:
+
+```toml
+[recording]
+delete_dir_after_slack_upload = false
+```
 
 ## AF_UNIX protocol
 

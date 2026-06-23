@@ -8,10 +8,10 @@ from .config import SlackConfig
 from .ffmpeg_utils import utc_stamp
 
 
-async def upload_file_to_slack(config: SlackConfig, file_path: Path, *, title: str) -> None:
+async def upload_file_to_slack(config: SlackConfig, file_path: Path, *, title: str) -> bool:
     if not config.enabled:
         print(f"{utc_stamp()} slack: disabled; not uploading {file_path}", file=sys.stderr, flush=True)
-        return
+        return False
 
     token = config.resolved_token()
     channel_id = config.resolved_channel_id()
@@ -21,7 +21,7 @@ async def upload_file_to_slack(config: SlackConfig, file_path: Path, *, title: s
             file=sys.stderr,
             flush=True,
         )
-        return
+        return False
 
     def _upload() -> None:
         try:
@@ -44,3 +44,4 @@ async def upload_file_to_slack(config: SlackConfig, file_path: Path, *, title: s
 
     await asyncio.to_thread(_upload)
     print(f"{utc_stamp()} slack: uploaded {file_path}", file=sys.stderr, flush=True)
+    return True
