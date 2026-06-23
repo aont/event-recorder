@@ -13,8 +13,8 @@ async def upload_file_to_slack(config: SlackConfig, file_path: Path, *, title: s
         print(f"{utc_stamp()} slack: disabled; not uploading {file_path}", file=sys.stderr, flush=True)
         return False
 
-    token = config.resolved_token()
-    channel_id = config.resolved_channel_id()
+    token = config.bot_token
+    channel_id = config.channel_id
     if not token or not channel_id:
         print(
             f"{utc_stamp()} slack: enabled but token/channel_id is missing; not uploading {file_path}",

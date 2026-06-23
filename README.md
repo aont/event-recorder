@@ -70,21 +70,16 @@ score_threshold = 0.4
 model_path = "./models/efficientdet_lite0.tflite"
 ```
 
-For Slack upload:
+For Slack upload, configure explicit values in the TOML file:
 
 ```toml
 [slack]
 enabled = true
-bot_token_env = "SLACK_BOT_TOKEN"
-channel_id_env = "SLACK_CHANNEL_ID"
+bot_token = "xoxb-..."
+channel_id = "C0123456789"
 ```
 
-Then export:
-
-```bash
-export SLACK_BOT_TOKEN='xoxb-...'
-export SLACK_CHANNEL_ID='C0123456789'
-```
+The deprecated `bot_token_env` and `channel_id_env` settings are not read.
 
 ## Run
 
@@ -159,13 +154,13 @@ The recording task:
 4. Polls the source m3u8 and appends new segment entries to the destination m3u8.
 5. Ends the destination playlist with `#EXT-X-ENDLIST` after the copied segment timeline reaches the current end time.
 6. Converts the captured HLS into MP4 with ffmpeg when `[recording].convert_to_mp4 = true`.
-7. Uploads the MP4 to Slack when `[slack].enabled = true` and credentials are configured.
+7. Uploads the MP4 to Slack when `[slack].enabled = true` and `bot_token` and `channel_id` are configured.
 8. Deletes the per-recording directory, including copied segments and m3u8, after a successful Slack upload when `[recording].delete_dir_after_slack_upload = true` (default).
 
 
 ### Uploaded recording directory cleanup
 
-By default, after a successful Slack upload, proc1 deletes the per-recording directory under `[paths].recordings_dir`. This removes the copied HLS playlist, hard-linked/copied segments, and generated MP4. Cleanup is not performed when Slack is disabled, credentials are missing, upload fails, or MP4 conversion fails.
+By default, after a successful Slack upload, proc1 deletes the per-recording directory under `[paths].recordings_dir`. This removes the copied HLS playlist, hard-linked/copied segments, and generated MP4. Cleanup is not performed when Slack is disabled, `bot_token` or `channel_id` is missing, upload fails, or MP4 conversion fails.
 
 To keep uploaded recording directories on disk:
 

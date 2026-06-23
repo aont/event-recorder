@@ -194,9 +194,7 @@ class RecordingConfig:
 class SlackConfig:
     enabled: bool = False
     bot_token: str | None = None
-    bot_token_env: str = "SLACK_BOT_TOKEN"
     channel_id: str | None = None
-    channel_id_env: str = "SLACK_CHANNEL_ID"
     title_prefix: str = "Recording"
     initial_comment: str = "Recording uploaded."
 
@@ -208,18 +206,10 @@ class SlackConfig:
         return cls(
             enabled=bool(data.get("enabled", default.enabled)),
             bot_token=str(token) if token else None,
-            bot_token_env=str(data.get("bot_token_env", default.bot_token_env)),
             channel_id=str(channel) if channel else None,
-            channel_id_env=str(data.get("channel_id_env", default.channel_id_env)),
             title_prefix=str(data.get("title_prefix", default.title_prefix)),
             initial_comment=str(data.get("initial_comment", default.initial_comment)),
         )
-
-    def resolved_token(self) -> str | None:
-        return self.bot_token or os.environ.get(self.bot_token_env)
-
-    def resolved_channel_id(self) -> str | None:
-        return self.channel_id or os.environ.get(self.channel_id_env)
 
 
 @dataclass(frozen=True)

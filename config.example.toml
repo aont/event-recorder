@@ -62,13 +62,11 @@ delete_dir_after_slack_upload = true
 
 [slack]
 enabled = false
-bot_token_env = "SLACK_BOT_TOKEN"
-channel_id_env = "SLACK_CHANNEL_ID"
-title_prefix = "Recording"
-initial_comment = "Recording uploaded."
-# You may set bot_token/channel_id here instead of env vars, but env vars are safer.
+# Explicit values only. Environment-variable indirection is intentionally unsupported.
 # bot_token = "xoxb-..."
 # channel_id = "C0123456789"
+title_prefix = "Recording"
+initial_comment = "Recording uploaded."
 
 [proc2]
 model_path = "./models/efficientdet_lite0.tflite"
