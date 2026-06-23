@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from recording_system_r4.recording import _safe_timestamp
+from myrecorder.recording import _safe_timestamp
 
 
 def test_safe_timestamp_utc_legacy_form():

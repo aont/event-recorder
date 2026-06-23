@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from recording_system_r4.hls import parse_m3u8_text
+from myrecorder.hls import parse_m3u8_text
 
 
 def test_parse_playlist_media_sequence_and_program_date_time():

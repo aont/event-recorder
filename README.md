@@ -10,7 +10,7 @@ The code targets Python 3.11+ on Linux/macOS. Hard links are POSIX features.
 ## Layout
 
 ```text
-recording_system_r4/
+myrecorder/
   config.py              TOML config loader
   ffmpeg_utils.py        ffmpeg process helpers, HLS task, frame extraction
   hls.py                 lightweight HLS m3u8 parser/writer helpers
@@ -26,15 +26,30 @@ pyproject.toml
 
 `ipc.py` may remain in older source trees for compatibility tests, but runtime no longer uses AF_UNIX.
 
-## Install
+## Setup without installing the package
+
+From the repository root, create a virtual environment and install only runtime dependencies:
 
 ```bash
-cd recording_system_r4
 python3.11 -m venv .venv
 . .venv/bin/activate
 pip install -U pip
-pip install -e .
+pip install -r requirements.txt
 ```
+
+Then run either of these from the repository root:
+
+```bash
+python3 -m myrecorder --config config.toml
+```
+
+or:
+
+```bash
+./bin/myrecorder --config config.toml
+```
+
+`pip install .` is optional. Installing the package only creates the `myrecorder` console script globally or inside the active virtualenv.
 
 You also need an `ffmpeg` binary in `PATH`, or set `[hls].ffmpeg_bin`.
 
@@ -82,6 +97,20 @@ channel_id = "C0123456789"
 The deprecated `bot_token_env` and `channel_id_env` settings are not read.
 
 ## Run
+
+Without installing the package:
+
+```bash
+python3 -m myrecorder --config config.toml
+```
+
+or:
+
+```bash
+./bin/myrecorder --config config.toml
+```
+
+After optional `pip install .`, the console script is also available:
 
 ```bash
 myrecorder --config config.toml

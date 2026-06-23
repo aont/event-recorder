@@ -1,6 +1,6 @@
 import asyncio
 
-from recording_system_r4.ipc import read_json_message, write_json_message
+from myrecorder.ipc import read_json_message, write_json_message
 
 
 class MemoryWriter:
