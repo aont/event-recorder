@@ -3,7 +3,7 @@
 Single-command implementation:
 
 - `myrecorder`: RTSP → HLS with `asyncio.subprocess`, m3u8 loading, frame extraction, AI trigger handling, HLS clip capture, MP4 conversion, optional Slack upload.
-- MediaPipe EfficientDet inference runs from `myrecorder` through `concurrent.futures.ProcessPoolExecutor`. There is no standalone `proc2` command and no AF_UNIX IPC path.
+- MediaPipe EfficientDet inference runs from `myrecorder` through `concurrent.futures.ProcessPoolExecutor`.
 
 The code targets Python 3.11+ on Linux/macOS. Hard links are POSIX features.
 
