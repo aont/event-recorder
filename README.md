@@ -26,7 +26,26 @@ pyproject.toml
 
 `ipc.py` may remain in older source trees for compatibility tests, but runtime no longer uses AF_UNIX.
 
-## Setup without installing the package
+## Setup
+
+From the repository root, create a virtual environment and install the project package with its runtime dependencies:
+
+```bash
+python3.11 -m venv .venv
+. .venv/bin/activate
+pip install -U pip
+pip install .
+```
+
+Installing the package creates the `myrecorder` console script inside the active virtualenv. Run it with:
+
+```bash
+myrecorder --config config.toml
+```
+
+You also need an `ffmpeg` binary in `PATH`, or set `[hls].ffmpeg_bin`.
+
+## Setup without installing as a package
 
 From the repository root, create a virtual environment and install only runtime dependencies:
 
@@ -48,8 +67,6 @@ or:
 ```bash
 ./bin/myrecorder --config config.toml
 ```
-
-`pip install .` is optional. Installing the package only creates the `myrecorder` console script globally or inside the active virtualenv.
 
 You also need an `ffmpeg` binary in `PATH`, or set `[hls].ffmpeg_bin`.
 
