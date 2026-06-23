@@ -1,30 +1,47 @@
 from __future__ import annotations
 
 import asyncio
-import base64
+import functools
 import uuid
+from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .ipc import read_json_message, write_json_message
+from .ai_worker import analyze_frame_in_worker, init_ai_worker
 
 
 class AiClient:
+    """Async proc1-side AI facade backed by ProcessPoolExecutor workers."""
+
     def __init__(
         self,
         *,
-        socket_path: Path,
+        model_path: Path,
         targets: list[str],
         score_threshold: float,
         timeout_seconds: float,
-        max_message_bytes: int,
+        max_results: int,
+        workers: int,
     ) -> None:
-        self.socket_path = socket_path
+        self.model_path = model_path
         self.targets = targets
         self.score_threshold = score_threshold
         self.timeout_seconds = timeout_seconds
-        self.max_message_bytes = max_message_bytes
+        self.max_results = max_results
+        self.workers = workers
+        self._executor: ProcessPoolExecutor | None = None
+
+    def start(self) -> None:
+        if self._executor is not None:
+            return
+        if not self.model_path.exists():
+            raise FileNotFoundError(f"model_path does not exist: {self.model_path}")
+        self._executor = ProcessPoolExecutor(
+            max_workers=self.workers,
+            initializer=init_ai_worker,
+            initargs=(str(self.model_path), self.max_results),
+        )
 
     async def analyze_frame(
         self,
@@ -36,9 +53,23 @@ class AiClient:
         segment_uri: str,
         offset_seconds: float,
     ) -> dict[str, Any]:
-        request = {
-            "type": "analyze_frame",
-            "request_id": str(uuid.uuid4()),
+        self.start()
+        assert self._executor is not None
+        loop = asyncio.get_running_loop()
+        request_id = str(uuid.uuid4())
+        call = functools.partial(
+            analyze_frame_in_worker,
+            image_bytes,
+            self.targets,
+            self.score_threshold,
+        )
+        result = await asyncio.wait_for(
+            loop.run_in_executor(self._executor, call),
+            timeout=self.timeout_seconds,
+        )
+        return {
+            "ok": True,
+            "request_id": request_id,
             "frame_id": frame_id,
             "timestamp": timestamp.isoformat(),
             "segment_sequence": segment_sequence,
@@ -46,19 +77,11 @@ class AiClient:
             "offset_seconds": offset_seconds,
             "targets": self.targets,
             "score_threshold": self.score_threshold,
-            "image_format": "jpeg",
-            "image_base64": base64.b64encode(image_bytes).decode("ascii"),
+            **result,
         }
-        async def _roundtrip() -> dict[str, Any]:
-            reader, writer = await asyncio.open_unix_connection(str(self.socket_path))
-            try:
-                await write_json_message(writer, request)
-                response = await read_json_message(reader, max_bytes=self.max_message_bytes)
-                if response is None:
-                    raise RuntimeError("AI server closed the connection without a response")
-                return response
-            finally:
-                writer.close()
-                await writer.wait_closed()
 
-        return await asyncio.wait_for(_roundtrip(), timeout=self.timeout_seconds)
+    async def close(self) -> None:
+        executor = self._executor
+        self._executor = None
+        if executor is not None:
+            executor.shutdown(wait=False, cancel_futures=True)

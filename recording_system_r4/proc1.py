@@ -24,7 +24,7 @@ def clean_source_hls_dir(path: Path) -> None:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Recording System r4 proc1: RTSP→HLS, frame analysis, recording")
+    parser = argparse.ArgumentParser(description="myrecorder: RTSP→HLS, frame analysis, recording")
     parser.add_argument("--config", required=True, help="Path to TOML config")
     return parser.parse_args(argv)
 
@@ -38,22 +38,16 @@ async def amain(argv: list[str] | None = None) -> int:
     if config.hls.clean_source_on_start:
         clean_source_hls_dir(config.paths.source_hls_dir)
 
-    if not config.ai.socket_path.exists():
-        print(
-            f"{utc_stamp()} proc1: warning: AI socket does not exist yet: {config.ai.socket_path}. "
-            "Start proc2 before proc1.",
-            file=sys.stderr,
-            flush=True,
-        )
-
     segment_events: asyncio.Queue[SegmentLogEvent] = asyncio.Queue()
     ai_client = AiClient(
-        socket_path=config.ai.socket_path,
+        model_path=config.ai.model_path,
         targets=config.ai.target_objects,
         score_threshold=config.ai.score_threshold,
         timeout_seconds=config.ai.timeout_seconds,
-        max_message_bytes=config.ai.max_message_bytes,
+        max_results=config.ai.max_results,
+        workers=config.ai.workers,
     )
+    ai_client.start()
     recording_manager = RecordingManager(config)
     ffmpeg_task_runner = FfmpegHlsTask(config, segment_events)
     m3u8_loader = M3u8LoadingTask(
@@ -85,6 +79,7 @@ async def amain(argv: list[str] | None = None) -> int:
         if not ffmpeg_task.done():
             ffmpeg_task.cancel()
         await asyncio.gather(ffmpeg_task, loader_task, return_exceptions=True)
+        await ai_client.close()
         await recording_manager.close()
 
 

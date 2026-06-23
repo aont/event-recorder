@@ -150,21 +150,23 @@ class FrameConfig:
 
 @dataclass(frozen=True)
 class AiConfig:
-    socket_path: Path = Path("/tmp/recording-r4-proc2.sock")
+    model_path: Path = Path("efficientdet_lite0.tflite")
     target_objects: list[str] = field(default_factory=lambda: ["cat"])
     score_threshold: float = 0.4
     timeout_seconds: float = 20.0
-    max_message_bytes: int = 20 * 1024 * 1024
+    max_results: int = -1
+    workers: int = 1
 
     @classmethod
     def from_toml(cls, data: Mapping[str, Any], base_dir: Path) -> "AiConfig":
         default = cls()
         return cls(
-            socket_path=_path(data.get("socket_path", default.socket_path), base_dir),
+            model_path=_path(data.get("model_path", default.model_path), base_dir),
             target_objects=_list(data.get("target_objects"), default.target_objects),
             score_threshold=float(data.get("score_threshold", default.score_threshold)),
             timeout_seconds=float(data.get("timeout_seconds", default.timeout_seconds)),
-            max_message_bytes=int(data.get("max_message_bytes", default.max_message_bytes)),
+            max_results=int(data.get("max_results", default.max_results)),
+            workers=int(data.get("workers", default.workers)),
         )
 
 
@@ -217,29 +219,6 @@ class SlackConfig:
 
 
 @dataclass(frozen=True)
-class Proc2Config:
-    socket_path: Path = Path("/tmp/recording-r4-proc2.sock")
-    model_path: Path = Path("efficientdet_lite0.tflite")
-    target_objects: list[str] = field(default_factory=lambda: ["cat"])
-    score_threshold: float = 0.4
-    max_results: int = -1
-    max_message_bytes: int = 20 * 1024 * 1024
-
-    @classmethod
-    def from_toml(cls, data: Mapping[str, Any], ai: Mapping[str, Any], base_dir: Path) -> "Proc2Config":
-        default = cls()
-        model_raw = data.get("model_path", default.model_path)
-        return cls(
-            socket_path=_path(data.get("socket_path", ai.get("socket_path", default.socket_path)), base_dir),
-            model_path=_path(model_raw, base_dir),
-            target_objects=_list(data.get("target_objects", ai.get("target_objects")), default.target_objects),
-            score_threshold=float(data.get("score_threshold", ai.get("score_threshold", default.score_threshold))),
-            max_results=int(data.get("max_results", default.max_results)),
-            max_message_bytes=int(data.get("max_message_bytes", ai.get("max_message_bytes", default.max_message_bytes))),
-        )
-
-
-@dataclass(frozen=True)
 class AppConfig:
     base_dir: Path
     paths: PathsConfig
@@ -249,7 +228,6 @@ class AppConfig:
     ai: AiConfig
     recording: RecordingConfig
     slack: SlackConfig
-    proc2: Proc2Config
 
     @classmethod
     def from_file(cls, path: str | Path) -> "AppConfig":
@@ -268,7 +246,6 @@ class AppConfig:
             ai=AiConfig.from_toml(ai_section, base_dir),
             recording=RecordingConfig.from_toml(_section(data, "recording")),
             slack=SlackConfig.from_toml(_section(data, "slack")),
-            proc2=Proc2Config.from_toml(_section(data, "proc2"), ai_section, base_dir),
         )
 
     def ensure_directories(self) -> None:
@@ -295,3 +272,7 @@ class AppConfig:
             raise ValueError("[frames].tb_seconds must be >= 0")
         if self.hls.retain_segments <= 0:
             raise ValueError("[hls].retain_segments must be > 0")
+        if self.ai.workers <= 0:
+            raise ValueError("[ai].workers must be > 0")
+        if not self.ai.model_path.exists():
+            raise FileNotFoundError(f"[ai].model_path does not exist: {self.ai.model_path}")

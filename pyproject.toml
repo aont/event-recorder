@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "recording-system-r4"
-version = "0.1.0"
-description = "Async RTSP to HLS recorder with MediaPipe AF_UNIX AI trigger"
+version = "0.2.0"
+description = "Async RTSP to HLS recorder with MediaPipe ProcessPool AI trigger"
 requires-python = ">=3.11"
 dependencies = [
   "mediapipe>=0.10",
@@ -15,5 +15,4 @@ dependencies = [
 ]
 
 [project.scripts]
-recording-r4-proc1 = "recording_system_r4.proc1:main"
-recording-r4-proc2 = "recording_system_r4.proc2:main"
+myrecorder = "recording_system_r4.proc1:main"

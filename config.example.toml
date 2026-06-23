@@ -45,11 +45,13 @@ skip_existing_segments_on_start = false
 echo_m3u8_progress_logs = false
 
 [ai]
-socket_path = "/tmp/recording-r4-proc2.sock"
+model_path = "./models/efficientdet_lite0.tflite"
 target_objects = ["cat"]
 score_threshold = 0.4
 timeout_seconds = 20.0
-max_message_bytes = 20971520
+max_results = -1
+# Number of MediaPipe worker processes used by concurrent.futures.ProcessPoolExecutor.
+workers = 1
 
 [recording]
 poll_interval_seconds = 0.5
@@ -70,11 +72,3 @@ enabled = false
 # channel_id = "C0123456789"
 title_prefix = "Recording"
 initial_comment = "Recording uploaded."
-
-[proc2]
-model_path = "./models/efficientdet_lite0.tflite"
-# Optional overrides; defaults are inherited from [ai].
-# socket_path = "/tmp/recording-r4-proc2.sock"
-# target_objects = ["cat"]
-# score_threshold = 0.4
-max_results = -1
