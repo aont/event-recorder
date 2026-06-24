@@ -150,7 +150,7 @@ myrecorder --config config.toml
 -hls_flags delete_segments+program_date_time+temp_file
 ```
 
-The playlist is treated as the source of truth. FFmpeg stdout/stderr are still drained, and segment-like `Opening ...` log lines wake the m3u8 loader. By default, these ffmpeg logs are not echoed; set `[hls].echo_ffmpeg_logs = true` for debugging.
+The playlist is treated as the source of truth. FFmpeg stdout/stderr are still drained, and segment-like `Opening ...` log lines wake the m3u8 loader. By default, these ffmpeg logs are not echoed; set `[hls].echo_ffmpeg_logs = true` for debugging. If the RTSP ffmpeg process exits unexpectedly, `myrecorder` keeps running and restarts ffmpeg after `[hls].restart_sleep_seconds` (default `5.0`).
 
 ### m3u8-loader progress logging
 

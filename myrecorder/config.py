@@ -93,6 +93,7 @@ class HlsConfig:
     stream_args: list[str] = field(default_factory=lambda: ["-map", "0:v:0", "-map", "0:a?", "-c", "copy"])
     output_args: list[str] = field(default_factory=list)
     clean_source_on_start: bool = True
+    restart_sleep_seconds: float = 5.0
 
     @classmethod
     def from_toml(cls, data: Mapping[str, Any]) -> "HlsConfig":
@@ -111,6 +112,7 @@ class HlsConfig:
             stream_args=_list(data.get("stream_args"), default.stream_args),
             output_args=_list(data.get("output_args"), default.output_args),
             clean_source_on_start=bool(data.get("clean_source_on_start", default.clean_source_on_start)),
+            restart_sleep_seconds=float(data.get("restart_sleep_seconds", default.restart_sleep_seconds)),
         )
 
     @property
@@ -272,6 +274,8 @@ class AppConfig:
             raise ValueError("[frames].tb_seconds must be >= 0")
         if self.hls.retain_segments <= 0:
             raise ValueError("[hls].retain_segments must be > 0")
+        if self.hls.restart_sleep_seconds < 0:
+            raise ValueError("[hls].restart_sleep_seconds must be >= 0")
         if self.ai.workers <= 0:
             raise ValueError("[ai].workers must be > 0")
         if not self.ai.model_path.exists():

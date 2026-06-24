@@ -54,6 +54,8 @@ class FfmpegHlsTask:
         self.segment_events = segment_events
         self._proc: asyncio.subprocess.Process | None = None
         self._seen_log_paths: set[Path] = set()
+        self._stopping = False
+        self._stop_event = asyncio.Event()
 
     def command(self) -> list[str]:
         cfg = self.config
@@ -108,6 +110,24 @@ class FfmpegHlsTask:
             await self.segment_events.put(SegmentLogEvent(path=resolved, line=line))
 
     async def run(self) -> int:
+        while not self._stopping:
+            returncode = await self._run_once()
+            if self._stopping:
+                return returncode
+            sleep_seconds = self.config.hls.restart_sleep_seconds
+            print(
+                f"{utc_stamp()} app: ffmpeg HLS exited with code {returncode}; "
+                f"restarting in {sleep_seconds:g}s",
+                file=sys.stderr,
+                flush=True,
+            )
+            try:
+                await asyncio.wait_for(self._stop_event.wait(), timeout=sleep_seconds)
+            except asyncio.TimeoutError:
+                pass
+        return 0
+
+    async def _run_once(self) -> int:
         cmd = self.command()
         print(f"{utc_stamp()} app: starting ffmpeg HLS: {' '.join(cmd)}", file=sys.stderr, flush=True)
         self._proc = await asyncio.create_subprocess_exec(
@@ -143,9 +163,12 @@ class FfmpegHlsTask:
             for task in (stdout_task, stderr_task):
                 if not task.done():
                     task.cancel()
-            await self.terminate()
+            await asyncio.gather(stdout_task, stderr_task, return_exceptions=True)
+            self._proc = None
 
     async def terminate(self) -> None:
+        self._stopping = True
+        self._stop_event.set()
         proc = self._proc
         if proc is None or proc.returncode is not None:
             return

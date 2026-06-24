@@ -29,6 +29,8 @@ echo_ffmpeg_logs = false
 # Replace with transcode args if your camera codec/container requires it.
 stream_args = ["-map", "0:v:0", "-map", "0:a?", "-c", "copy"]
 output_args = []
+# Sleep this many seconds before restarting ffmpeg if RTSP/HLS generation exits unexpectedly.
+restart_sleep_seconds = 5.0
 clean_source_on_start = true
 
 [frames]
