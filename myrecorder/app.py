@@ -2,25 +2,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import shutil
 import sys
-from pathlib import Path
-
 from .ai_client import AiClient
 from .config import AppConfig
-from .ffmpeg_utils import FfmpegHlsTask, SegmentLogEvent, utc_stamp
+from .ffmpeg_utils import FfmpegHlsTask, SegmentLogEvent, clean_source_hls_dir
 from .m3u8_loader import M3u8LoadingTask
 from .recording import RecordingManager
-
-
-def clean_source_hls_dir(path: Path) -> None:
-    path.mkdir(parents=True, exist_ok=True)
-    for child in path.iterdir():
-        if child.is_dir():
-            shutil.rmtree(child)
-        else:
-            child.unlink()
-    print(f"{utc_stamp()} app: cleaned source HLS dir {path}", file=sys.stderr, flush=True)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import shutil
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -46,6 +47,16 @@ async def pump_stream(
 class SegmentLogEvent:
     path: Path
     line: str
+
+
+def clean_source_hls_dir(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    for child in path.iterdir():
+        if child.is_dir():
+            shutil.rmtree(child)
+        else:
+            child.unlink()
+    print(f"{utc_stamp()} app: cleaned source HLS dir {path}", file=sys.stderr, flush=True)
 
 
 class FfmpegHlsTask:
@@ -125,6 +136,9 @@ class FfmpegHlsTask:
                 await asyncio.wait_for(self._stop_event.wait(), timeout=sleep_seconds)
             except asyncio.TimeoutError:
                 pass
+            if not self._stopping:
+                clean_source_hls_dir(self.config.paths.source_hls_dir)
+                self._seen_log_paths.clear()
         return 0
 
     async def _run_once(self) -> int:
