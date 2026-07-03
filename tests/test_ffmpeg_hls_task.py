@@ -19,7 +19,6 @@ def make_config(source_hls_dir):
     return AppConfig(
         base_dir=source_hls_dir.parent,
         paths=PathsConfig(
-            work_dir=source_hls_dir.parent,
             source_hls_dir=source_hls_dir,
             recordings_dir=source_hls_dir.parent / "recordings",
             frame_storage_dir=source_hls_dir.parent / "frames",

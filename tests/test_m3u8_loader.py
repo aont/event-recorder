@@ -17,21 +17,20 @@ from myrecorder.ffmpeg_utils import SegmentLogEvent
 from myrecorder.m3u8_loader import M3u8LoadingTask
 
 
-def make_config(work_dir: Path) -> AppConfig:
-    source_hls_dir = work_dir / "source-hls"
+def make_config(base_dir: Path) -> AppConfig:
+    source_hls_dir = base_dir / "source-hls"
     source_hls_dir.mkdir()
     return AppConfig(
-        base_dir=work_dir,
+        base_dir=base_dir,
         paths=PathsConfig(
-            work_dir=work_dir,
             source_hls_dir=source_hls_dir,
-            recordings_dir=work_dir / "recordings",
-            frame_storage_dir=work_dir / "frames",
+            recordings_dir=base_dir / "recordings",
+            frame_storage_dir=base_dir / "frames",
         ),
         rtsp=RtspConfig(url="rtsp://camera.local/stream"),
         hls=HlsConfig(),
         frames=FrameConfig(),
-        ai=AiConfig(model_path=work_dir / "model.tflite"),
+        ai=AiConfig(model_path=base_dir / "model.tflite"),
         recording=RecordingConfig(poll_interval_seconds=0.01),
         slack=SlackConfig(),
     )

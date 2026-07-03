@@ -91,6 +91,15 @@ Copy the example and edit at least these values:
 cp config.example.toml config.toml
 ```
 
+The `[paths]` settings are direct directory paths. Relative values are resolved relative to the TOML file:
+
+```toml
+[paths]
+source_hls_dir = "./var/recording-r4/source-hls"
+recordings_dir = "./var/recording-r4/recordings"
+frame_storage_dir = "./var/recording-r4/frames"
+```
+
 Minimum required changes:
 
 ```toml

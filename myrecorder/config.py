@@ -39,26 +39,16 @@ def _path(value: str | Path, base_dir: Path) -> Path:
 
 @dataclass(frozen=True)
 class PathsConfig:
-    work_dir: Path = Path("./var/recording-r4")
-    source_hls_dir: Path = Path("source-hls")
-    recordings_dir: Path = Path("recordings")
-    frame_storage_dir: Path = Path("frames")
+    source_hls_dir: Path = Path("./var/recording-r4/source-hls")
+    recordings_dir: Path = Path("./var/recording-r4/recordings")
+    frame_storage_dir: Path = Path("./var/recording-r4/frames")
 
     @classmethod
     def from_toml(cls, data: Mapping[str, Any], base_dir: Path) -> "PathsConfig":
-        raw_work = data.get("work_dir", cls.work_dir)
-        work_dir = _path(raw_work, base_dir)
-
-        def child(name: str, default: Path) -> Path:
-            raw = data.get(name, default)
-            p = Path(_expand(str(raw)))
-            return p if p.is_absolute() else (work_dir / p).resolve()
-
         return cls(
-            work_dir=work_dir,
-            source_hls_dir=child("source_hls_dir", cls.source_hls_dir),
-            recordings_dir=child("recordings_dir", cls.recordings_dir),
-            frame_storage_dir=child("frame_storage_dir", cls.frame_storage_dir),
+            source_hls_dir=_path(data.get("source_hls_dir", cls.source_hls_dir), base_dir),
+            recordings_dir=_path(data.get("recordings_dir", cls.recordings_dir), base_dir),
+            frame_storage_dir=_path(data.get("frame_storage_dir", cls.frame_storage_dir), base_dir),
         )
 
 
@@ -252,7 +242,6 @@ class AppConfig:
         )
 
     def ensure_directories(self) -> None:
-        self.paths.work_dir.mkdir(parents=True, exist_ok=True)
         self.paths.source_hls_dir.mkdir(parents=True, exist_ok=True)
         self.paths.recordings_dir.mkdir(parents=True, exist_ok=True)
         if self.frames.save_frames:

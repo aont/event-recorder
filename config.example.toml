@@ -1,10 +1,8 @@
 [paths]
-# Relative paths are resolved under work_dir unless work_dir itself is relative,
-# in which case it is resolved relative to this TOML file.
-work_dir = "./var/recording-r4"
-source_hls_dir = "source-hls"
-recordings_dir = "recordings"
-frame_storage_dir = "frames"
+# Relative paths are resolved relative to this TOML file.
+source_hls_dir = "./var/recording-r4/source-hls"
+recordings_dir = "./var/recording-r4/recordings"
+frame_storage_dir = "./var/recording-r4/frames"
 
 [rtsp]
 url = "rtsp://example.local/stream"
