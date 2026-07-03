@@ -140,7 +140,6 @@ class FrameConfig:
 
 @dataclass(frozen=True)
 class AiConfig:
-    socket_path: Path = Path("./ai.sock")
     model_path: Path = Path("models/efficientdet_lite0.tflite")
     target_objects: list[str] = field(default_factory=lambda: ["cat"])
     score_threshold: float = 0.4
@@ -152,7 +151,6 @@ class AiConfig:
     def from_toml(cls, data: Mapping[str, Any], base_dir: Path) -> "AiConfig":
         default = cls()
         return cls(
-            socket_path=_path(data.get("socket_path", default.socket_path), base_dir),
             model_path=_path(data.get("model_path", default.model_path), base_dir),
             target_objects=_list(data.get("target_objects"), default.target_objects),
             score_threshold=float(data.get("score_threshold", default.score_threshold)),

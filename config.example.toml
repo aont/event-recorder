@@ -24,7 +24,6 @@ delete_frames_for_deleted_segments = true
 skip_existing_segments_on_start = false
 
 [ai]
-socket_path = "./ai.sock"
 model_path = "./models/efficientdet_lite0.tflite"
 target_objects = ["cat"]
 score_threshold = 0.4

@@ -25,6 +25,12 @@ def test_paths_config_has_no_work_dir() -> None:
     assert "work_dir" not in PathsConfig.__dataclass_fields__
 
 
+def test_ai_config_has_no_socket_path() -> None:
+    from myrecorder.config import AiConfig
+
+    assert "socket_path" not in AiConfig.__dataclass_fields__
+
+
 def test_app_config_uses_defaults_when_optional_sections_are_omitted(tmp_path: Path) -> None:
     from myrecorder.config import AppConfig
 
