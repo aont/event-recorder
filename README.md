@@ -84,7 +84,7 @@ Example `config` object:
 }
 ```
 
-The per-request `targets` and `score_threshold` values are optional and default to the command-line configuration. `targets` may be sent as a JSON string array when using an individual form field.
+The per-request `targets` and `score_threshold` values are optional and default to the command-line configuration. `targets` may be sent as a JSON string array when using an individual form field. These values are echoed for request compatibility only; detections are returned from MediaPipe without server-side filtering, relabeling, score-threshold processing, or bounding-box renaming.
 
 Successful response (`200`):
 
@@ -97,10 +97,13 @@ Successful response (`200`):
   "targets": ["cat"],
   "score_threshold": 0.4,
   "processing_ms": 12.3,
-  "has_target": true,
-  "num_targets": 1,
   "detections": [
-    {"label": "cat", "score": 0.91, "bbox": {"x": 1, "y": 2, "width": 3, "height": 4}}
+    {
+      "bounding_box": {"origin_x": 1, "origin_y": 2, "width": 3, "height": 4},
+      "categories": [
+        {"index": 17, "score": 0.91, "display_name": null, "category_name": "cat"}
+      ]
+    }
   ]
 }
 ```

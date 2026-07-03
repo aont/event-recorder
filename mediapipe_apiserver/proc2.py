@@ -38,17 +38,33 @@ class ServerConfig:
     max_request_bytes: int = 20 * 1024 * 1024
 
 
-def category_name(category: Any) -> str:
-    return getattr(category, "category_name", None) or getattr(category, "display_name", None) or ""
-
-
-def bbox_to_dict(bbox: Any) -> dict[str, int]:
+def category_to_dict(category: Any) -> dict[str, Any]:
     return {
-        "x": int(bbox.origin_x),
-        "y": int(bbox.origin_y),
-        "width": int(bbox.width),
-        "height": int(bbox.height),
+        "index": category.index,
+        "score": category.score,
+        "display_name": category.display_name,
+        "category_name": category.category_name,
     }
+
+
+def bbox_to_dict(bbox: Any) -> dict[str, Any]:
+    return {
+        "origin_x": bbox.origin_x,
+        "origin_y": bbox.origin_y,
+        "width": bbox.width,
+        "height": bbox.height,
+    }
+
+
+def detection_to_dict(detection: Any) -> dict[str, Any]:
+    return {
+        "bounding_box": bbox_to_dict(detection.bounding_box),
+        "categories": [category_to_dict(category) for category in detection.categories],
+    }
+
+
+def detection_result_to_dict(result: Any) -> dict[str, Any]:
+    return {"detections": [detection_to_dict(detection) for detection in result.detections]}
 
 
 def load_image_bytes_as_mediapipe_srgb(image_bytes: bytes) -> Any:
@@ -66,7 +82,7 @@ def load_image_bytes_as_mediapipe_srgb(image_bytes: bytes) -> Any:
 class DetectorPool:
     def __init__(self, config: ServerConfig) -> None:
         self.config = config
-        self._detectors: dict[tuple[tuple[str, ...], float], Any] = {}
+        self._detectors: dict[str, Any] = {}
         self._lock = threading.Lock()
 
     def close(self) -> None:
@@ -77,7 +93,7 @@ class DetectorPool:
                     close()
             self._detectors.clear()
 
-    def _create_detector(self, targets: list[str], threshold: float) -> Any:
+    def _create_detector(self) -> Any:
         BaseOptions = mp.tasks.BaseOptions
         ObjectDetector = mp.tasks.vision.ObjectDetector
         ObjectDetectorOptions = mp.tasks.vision.ObjectDetectorOptions
@@ -86,52 +102,33 @@ class DetectorPool:
         kwargs: dict[str, Any] = {
             "base_options": BaseOptions(model_asset_path=str(self.config.model_path)),
             "running_mode": VisionRunningMode.IMAGE,
-            "score_threshold": threshold,
-            "max_results": self.config.max_results,
         }
-        if targets:
-            kwargs["category_allowlist"] = targets
+        if self.config.max_results != -1:
+            kwargs["max_results"] = self.config.max_results
         options = ObjectDetectorOptions(**kwargs)
         return ObjectDetector.create_from_options(options)
 
-    def _get_detector(self, targets: list[str], threshold: float) -> Any:
-        key = (tuple(targets), float(threshold))
+    def _get_detector(self) -> Any:
+        key = "default"
         detector = self._detectors.get(key)
         if detector is None:
             print(
-                f"{utc_stamp()} mediapipe-http: creating detector targets={targets!r} threshold={threshold}",
+                f"{utc_stamp()} mediapipe-http: creating detector",
                 file=sys.stderr,
                 flush=True,
             )
-            detector = self._create_detector(targets, threshold)
+            detector = self._create_detector()
             self._detectors[key] = detector
         return detector
 
-    def detect(self, image_bytes: bytes, targets: list[str], threshold: float) -> dict[str, Any]:
+    def detect(self, image_bytes: bytes) -> dict[str, Any]:
         mp_image = load_image_bytes_as_mediapipe_srgb(image_bytes)
-        target_set = set(targets)
-        detections: list[dict[str, Any]] = []
 
         with self._lock:
-            detector = self._get_detector(targets, threshold)
+            detector = self._get_detector()
             result = detector.detect(mp_image)
 
-        for detection in result.detections:
-            bbox = bbox_to_dict(detection.bounding_box)
-            for category in detection.categories:
-                name = category_name(category)
-                score = float(category.score)
-                if score < threshold:
-                    continue
-                if target_set and name not in target_set:
-                    continue
-                detections.append({"label": name, "score": score, "bbox": bbox})
-
-        return {
-            "has_target": len(detections) > 0,
-            "num_targets": len(detections),
-            "detections": detections,
-        }
+        return detection_result_to_dict(result)
 
 
 class MediaPipeHttpServer:
@@ -148,9 +145,9 @@ class MediaPipeHttpServer:
         app.on_cleanup.append(self.cleanup)
         return app
 
-    async def run_detection(self, image_bytes: bytes, targets: list[str], threshold: float) -> dict[str, Any]:
+    async def run_detection(self, image_bytes: bytes) -> dict[str, Any]:
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(self._executor, self.detectors.detect, image_bytes, targets, threshold)
+        return await loop.run_in_executor(self._executor, self.detectors.detect, image_bytes)
 
     async def cleanup(self, app: web.Application) -> None:
         self.detectors.close()
@@ -215,7 +212,7 @@ class MediaPipeHttpServer:
 
         started = time.perf_counter()
         try:
-            result = await self.run_detection(image_bytes, targets, threshold)
+            result = await self.run_detection(image_bytes)
         except Exception as exc:  # pragma: no cover - safety net for long-running daemon
             return {"ok": False, "request_id": request_id, "error": repr(exc)}, 500
 
