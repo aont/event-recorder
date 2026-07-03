@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import base64
+import json
 import sys
 import threading
 import time
@@ -160,35 +160,58 @@ class MediaPipeHttpServer:
         return web.json_response({"ok": True})
 
     async def handle_analyze_frame(self, request: web.Request) -> web.Response:
+        if not request.content_type.startswith("multipart/"):
+            return web.json_response({"ok": False, "error": "multipart/form-data request body is required"}, status=400)
+
         try:
-            message = await request.json()
-        except Exception as exc:
-            return web.json_response({"ok": False, "error": f"invalid JSON request: {exc}"}, status=400)
+            message, image_bytes = await self.read_multipart_message(request)
+        except ValueError as exc:
+            return web.json_response({"ok": False, "error": str(exc)}, status=400)
 
-        if not isinstance(message, dict):
-            return web.json_response({"ok": False, "error": "JSON request body must be an object"}, status=400)
-
-        response, status = await self.handle_message(message)
+        response, status = await self.handle_message(message, image_bytes)
         return web.json_response(response, status=status)
 
-    async def handle_message(self, message: dict[str, Any]) -> tuple[dict[str, Any], int]:
+    async def read_multipart_message(self, request: web.Request) -> tuple[dict[str, Any], bytes]:
+        reader = await request.multipart()
+        message: dict[str, Any] = {}
+        image_bytes: bytes | None = None
+
+        async for part in reader:
+            if part.name == "image":
+                image_bytes = await part.read(decode=False)
+                continue
+
+            value = await part.text()
+            if part.name == "config":
+                try:
+                    config = json.loads(value)
+                except json.JSONDecodeError as exc:
+                    raise ValueError(f"invalid config JSON: {exc}") from exc
+                if not isinstance(config, dict):
+                    raise ValueError("config multipart field must be a JSON object")
+                message.update(config)
+                continue
+
+            if part.name:
+                message[part.name] = value
+
+        if image_bytes is None:
+            raise ValueError("image multipart field is required")
+        if not image_bytes:
+            raise ValueError("image multipart field must not be empty")
+        return message, image_bytes
+
+    async def handle_message(self, message: dict[str, Any], image_bytes: bytes) -> tuple[dict[str, Any], int]:
         request_id = message.get("request_id")
-        targets = message.get("targets") or self.config.target_objects
-        if not isinstance(targets, list) or not all(isinstance(x, str) for x in targets):
+        targets_value = message.get("targets") or self.config.target_objects
+        targets = parse_targets(targets_value)
+        if targets is None:
             return {"ok": False, "request_id": request_id, "error": "targets must be a string list"}, 400
 
         try:
             threshold = float(message.get("score_threshold", self.config.score_threshold))
         except (TypeError, ValueError):
             return {"ok": False, "request_id": request_id, "error": "score_threshold must be a number"}, 400
-
-        image_b64 = message.get("image_base64")
-        if not isinstance(image_b64, str):
-            return {"ok": False, "request_id": request_id, "error": "image_base64 is required"}, 400
-        try:
-            image_bytes = base64.b64decode(image_b64, validate=True)
-        except Exception as exc:
-            return {"ok": False, "request_id": request_id, "error": f"invalid image_base64: {exc}"}, 400
 
         started = time.perf_counter()
         try:
@@ -207,6 +230,19 @@ class MediaPipeHttpServer:
             "processing_ms": elapsed_ms,
             **result,
         }, 200
+
+
+def parse_targets(value: Any) -> list[str] | None:
+    if isinstance(value, list) and all(isinstance(item, str) for item in value):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return _csv(value)
+        if isinstance(parsed, list) and all(isinstance(item, str) for item in parsed):
+            return parsed
+    return None
 
 
 def _csv(value: str) -> list[str]:
