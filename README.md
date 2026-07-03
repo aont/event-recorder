@@ -91,13 +91,15 @@ Copy the example and edit at least these values:
 cp config.example.toml config.toml
 ```
 
+The TOML file intentionally exposes only runtime/environment settings. Any omitted setting uses the default shown in `config.example.toml`; lower-level HLS, recording, logging, and worker-count values are constants in Python.
+
 The `[paths]` settings are direct directory paths. Relative values are resolved relative to the TOML file:
 
 ```toml
 [paths]
-source_hls_dir = "./var/recording-r4/source-hls"
-recordings_dir = "./var/recording-r4/recordings"
-frame_storage_dir = "./var/recording-r4/frames"
+source_hls_dir = "source-hls"
+recordings_dir = "recordings"
+frame_storage_dir = "frames"
 ```
 
 Minimum required changes:
@@ -110,8 +112,9 @@ url = "rtsp://camera-or-nvr/stream"
 model_path = "./models/efficientdet_lite0.tflite"
 target_objects = ["cat"]
 score_threshold = 0.4
-workers = 1
 ```
+
+`[hls].retain_segments` is not configured in TOML. It is calculated from the fixed HLS segment duration, `[frames].tc_seconds`, `[frames].tb_seconds`, and `[ai].timeout_seconds` so enough source segments are kept for frame analysis and the post-detection recording window.
 
 For Slack upload, configure explicit values in the TOML file:
 
@@ -153,23 +156,18 @@ myrecorder --config config.toml
 ```text
 -f hls
 -hls_time <segment_seconds>
--hls_list_size <retain_segments>
+-hls_list_size <auto-calculated retain_segments>
 -hls_delete_threshold <delete_threshold>
 -hls_start_number_source <start_number_source>
 -start_number <next_non_overlapping_segment_number>
 -hls_flags delete_segments+program_date_time+temp_file+append_list
 ```
 
-The playlist is treated as the source of truth. FFmpeg stdout/stderr are still drained, and segment-like `Opening ...` log lines wake the m3u8 loader. The m3u8 loader does not poll the playlist while waiting for new source segments; it processes the playlist only after a segment log wakeup. By default, these ffmpeg logs are not echoed; set `[hls].echo_ffmpeg_logs = true` for debugging. If the RTSP ffmpeg process exits unexpectedly, `myrecorder` keeps running, preserves `[paths].source_hls_dir`, and restarts ffmpeg after `[hls].restart_sleep_seconds` (default `5.0`). On each launch, ffmpeg receives `-start_number` set to one greater than the highest existing source segment number so restarted HLS output does not overlap with existing segment files.
+The playlist is treated as the source of truth. FFmpeg stdout/stderr are still drained, and segment-like `Opening ...` log lines wake the m3u8 loader. The m3u8 loader does not poll the playlist while waiting for new source segments; it processes the playlist only after a segment log wakeup. By default, these ffmpeg logs are not echoed; debugging them requires changing the `HlsConfig.echo_ffmpeg_logs` Python constant. If the RTSP ffmpeg process exits unexpectedly, `myrecorder` keeps running, preserves `[paths].source_hls_dir`, and restarts ffmpeg after `[hls].restart_sleep_seconds` (default `5.0`). On each launch, ffmpeg receives `-start_number` set to one greater than the highest existing source segment number so restarted HLS output does not overlap with existing segment files.
 
 ### m3u8-loader progress logging
 
-By default, routine `m3u8-loader` progress logs are suppressed. This includes segment log wakeups, frame extraction start/completion messages, skipped-existing-segment messages, and frame-cleanup messages. Warnings, errors, and target-detection messages remain visible. To debug loader progress, set:
-
-```toml
-[frames]
-echo_m3u8_progress_logs = true
-```
+By default, routine `m3u8-loader` progress logs are suppressed. This includes segment log wakeups, frame extraction start/completion messages, skipped-existing-segment messages, and frame-cleanup messages. Warnings, errors, and target-detection messages remain visible. To debug loader progress, change the `FrameConfig.echo_m3u8_progress_logs` Python constant.
 
 ### m3u8 loading and frame extraction
 
@@ -187,7 +185,7 @@ Frame timestamps are derived from `#EXT-X-PROGRAM-DATE-TIME` plus the frame offs
 
 ### AI execution model
 
-`myrecorder` creates a `concurrent.futures.ProcessPoolExecutor` with `[ai].workers` worker processes. Each worker initializes its own MediaPipe `ObjectDetector` from `[ai].model_path` and caches detectors by target/threshold.
+`myrecorder` creates a `concurrent.futures.ProcessPoolExecutor` with the `AiConfig.workers` Python constant. Each worker initializes its own MediaPipe `ObjectDetector` from `[ai].model_path` and caches detectors by target/threshold.
 
 The main process remains asyncio-driven. Frame analysis is awaited with:
 
@@ -239,26 +237,18 @@ rec_YYYYMMDDTHHMMSS.ffffff+ZZZZ_NNNN
 
 By default, `YYYYMMDDTHHMMSS` is based on the host process' local timezone, for example `+0900` on a machine configured for Japan Standard Time. To use the previous UTC filename form ending in `Z`:
 
-```toml
-[recording]
-use_local_time_for_filenames = false
-```
+Change the `RecordingConfig.use_local_time_for_filenames` Python constant to use UTC timestamped recording directory names instead.
 
 ## FFmpeg log output
 
 Log lines emitted by `myrecorder` use the host process' local timezone and include the numeric UTC offset, making logs line up with local operations and system logs.
 
-By default, `myrecorder` consumes ffmpeg stdout/stderr internally but does not echo ffmpeg log lines to the tool process stdout/stderr. This keeps runtime output quiet while still allowing segment-addition detection from ffmpeg logs, which is required to wake the m3u8 loader for new source segments. To debug ffmpeg output, set:
-
-```toml
-[hls]
-echo_ffmpeg_logs = true
-```
+By default, `myrecorder` consumes ffmpeg stdout/stderr internally but does not echo ffmpeg log lines to the tool process stdout/stderr. This keeps runtime output quiet while still allowing segment-addition detection from ffmpeg logs, which is required to wake the m3u8 loader for new source segments. To debug ffmpeg output, change the `HlsConfig.echo_ffmpeg_logs` Python constant.
 
 ## Notes and limitations
 
 - This is a reference implementation. In this environment it was syntax-checked and parser smoke-tested, but not exercised against a real RTSP camera, ffmpeg binary, MediaPipe model, or Slack workspace.
-- The default ffmpeg stream args use codec copy. Some RTSP streams require transcoding or bitstream filters; override `[hls].stream_args` / `[hls].output_args` as needed.
+- The default ffmpeg stream args use codec copy. Some RTSP streams require transcoding or bitstream filters; change the `HlsConfig.stream_args` / `HlsConfig.output_args` Python constants as needed.
 - The lightweight m3u8 parser covers the tags this system emits and consumes. It is not a full RFC 8216 parser.
 - Hard links require source and destination to be on the same filesystem. The fallback copy is included to avoid losing recordings when deployment paths cross filesystem boundaries.
-- `myrecorder` cleans `[paths].source_hls_dir` on startup by default. Disable startup cleanup with `[hls].clean_source_on_start = false` if you need to preserve that directory before the first ffmpeg launch. The directory is preserved across ffmpeg restarts; restarted ffmpeg processes append to the existing playlist and use a non-overlapping segment start number.
+- `myrecorder` cleans `[paths].source_hls_dir` on startup by default. Change the `HlsConfig.clean_source_on_start` Python constant if you need to preserve that directory before the first ffmpeg launch. The directory is preserved across ffmpeg restarts; restarted ffmpeg processes append to the existing playlist and use a non-overlapping segment start number.

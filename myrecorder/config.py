@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 import tomllib
 from dataclasses import dataclass, field
@@ -39,9 +40,9 @@ def _path(value: str | Path, base_dir: Path) -> Path:
 
 @dataclass(frozen=True)
 class PathsConfig:
-    source_hls_dir: Path = Path("./var/recording-r4/source-hls")
-    recordings_dir: Path = Path("./var/recording-r4/recordings")
-    frame_storage_dir: Path = Path("./var/recording-r4/frames")
+    source_hls_dir: Path = Path("source-hls")
+    recordings_dir: Path = Path("recordings")
+    frame_storage_dir: Path = Path("frames")
 
     @classmethod
     def from_toml(cls, data: Mapping[str, Any], base_dir: Path) -> "PathsConfig":
@@ -74,7 +75,7 @@ class HlsConfig:
     playlist_name: str = "live.m3u8"
     segment_pattern: str = "segment_%010d.ts"
     segment_seconds: float = 2.0
-    retain_segments: int = 10
+    retain_segments: int = 27
     delete_threshold: int = 2
     start_number_source: str = "generic"
     hls_flags: list[str] = field(default_factory=lambda: ["delete_segments", "program_date_time", "temp_file"])
@@ -86,22 +87,21 @@ class HlsConfig:
     restart_sleep_seconds: float = 5.0
 
     @classmethod
-    def from_toml(cls, data: Mapping[str, Any]) -> "HlsConfig":
+    def from_toml(
+        cls, data: Mapping[str, Any], frames: "FrameConfig" | None = None, ai: "AiConfig" | None = None
+    ) -> "HlsConfig":
         default = cls()
+        frames = frames or FrameConfig()
+        ai = ai or AiConfig()
+        segment_seconds = default.segment_seconds
+        if frames.tc_seconds <= 0:
+            raise ValueError("[frames].tc_seconds must be > 0")
+        frames_per_segment = max(1, math.ceil(segment_seconds / frames.tc_seconds))
+        analysis_window_seconds = frames_per_segment * ai.timeout_seconds
+        retain_segments = max(1, math.ceil((analysis_window_seconds + frames.tb_seconds) / segment_seconds) + 2)
         return cls(
             ffmpeg_bin=str(data.get("ffmpeg_bin", default.ffmpeg_bin)),
-            playlist_name=str(data.get("playlist_name", default.playlist_name)),
-            segment_pattern=str(data.get("segment_pattern", default.segment_pattern)),
-            segment_seconds=float(data.get("segment_seconds", default.segment_seconds)),
-            retain_segments=int(data.get("retain_segments", default.retain_segments)),
-            delete_threshold=int(data.get("delete_threshold", default.delete_threshold)),
-            start_number_source=str(data.get("start_number_source", default.start_number_source)),
-            hls_flags=_list(data.get("hls_flags"), default.hls_flags),
-            loglevel=str(data.get("loglevel", default.loglevel)),
-            echo_ffmpeg_logs=bool(data.get("echo_ffmpeg_logs", default.echo_ffmpeg_logs)),
-            stream_args=_list(data.get("stream_args"), default.stream_args),
-            output_args=_list(data.get("output_args"), default.output_args),
-            clean_source_on_start=bool(data.get("clean_source_on_start", default.clean_source_on_start)),
+            retain_segments=retain_segments,
             restart_sleep_seconds=float(data.get("restart_sleep_seconds", default.restart_sleep_seconds)),
         )
 
@@ -135,15 +135,13 @@ class FrameConfig:
             skip_existing_segments_on_start=bool(
                 data.get("skip_existing_segments_on_start", default.skip_existing_segments_on_start)
             ),
-            echo_m3u8_progress_logs=bool(
-                data.get("echo_m3u8_progress_logs", default.echo_m3u8_progress_logs)
-            ),
         )
 
 
 @dataclass(frozen=True)
 class AiConfig:
-    model_path: Path = Path("efficientdet_lite0.tflite")
+    socket_path: Path = Path("./ai.sock")
+    model_path: Path = Path("models/efficientdet_lite0.tflite")
     target_objects: list[str] = field(default_factory=lambda: ["cat"])
     score_threshold: float = 0.4
     timeout_seconds: float = 20.0
@@ -154,12 +152,13 @@ class AiConfig:
     def from_toml(cls, data: Mapping[str, Any], base_dir: Path) -> "AiConfig":
         default = cls()
         return cls(
+            socket_path=_path(data.get("socket_path", default.socket_path), base_dir),
             model_path=_path(data.get("model_path", default.model_path), base_dir),
             target_objects=_list(data.get("target_objects"), default.target_objects),
             score_threshold=float(data.get("score_threshold", default.score_threshold)),
             timeout_seconds=float(data.get("timeout_seconds", default.timeout_seconds)),
             max_results=int(data.get("max_results", default.max_results)),
-            workers=int(data.get("workers", default.workers)),
+            workers=default.workers,
         )
 
 
@@ -195,7 +194,7 @@ class SlackConfig:
     bot_token: str | None = None
     channel_id: str | None = None
     title_prefix: str = "Recording"
-    initial_comment: str = "Recording uploaded."
+    initial_comment: str = ""
 
     @classmethod
     def from_toml(cls, data: Mapping[str, Any]) -> "SlackConfig":
@@ -230,14 +229,16 @@ class AppConfig:
         base_dir = config_path.parent
         paths = PathsConfig.from_toml(_section(data, "paths"), base_dir)
         ai_section = _section(data, "ai")
+        frames = FrameConfig.from_toml(_section(data, "frames"))
+        ai = AiConfig.from_toml(ai_section, base_dir)
         return cls(
             base_dir=base_dir,
             paths=paths,
             rtsp=RtspConfig.from_toml(_section(data, "rtsp")),
-            hls=HlsConfig.from_toml(_section(data, "hls")),
-            frames=FrameConfig.from_toml(_section(data, "frames")),
-            ai=AiConfig.from_toml(ai_section, base_dir),
-            recording=RecordingConfig.from_toml(_section(data, "recording")),
+            hls=HlsConfig.from_toml(_section(data, "hls"), frames, ai),
+            frames=frames,
+            ai=ai,
+            recording=RecordingConfig(),
             slack=SlackConfig.from_toml(_section(data, "slack")),
         )
 
