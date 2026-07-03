@@ -5,19 +5,19 @@ import sys
 from pathlib import Path
 
 from .config import SlackConfig
-from .ffmpeg_utils import utc_stamp
+from .ffmpeg_utils import log_stamp
 
 
 async def upload_file_to_slack(config: SlackConfig, file_path: Path, *, title: str) -> bool:
     if not config.enabled:
-        print(f"{utc_stamp()} slack: disabled; not uploading {file_path}", file=sys.stderr, flush=True)
+        print(f"{log_stamp()} slack: disabled; not uploading {file_path}", file=sys.stderr, flush=True)
         return False
 
     token = config.bot_token
     channel_id = config.channel_id
     if not token or not channel_id:
         print(
-            f"{utc_stamp()} slack: enabled but token/channel_id is missing; not uploading {file_path}",
+            f"{log_stamp()} slack: enabled but token/channel_id is missing; not uploading {file_path}",
             file=sys.stderr,
             flush=True,
         )
@@ -43,5 +43,5 @@ async def upload_file_to_slack(config: SlackConfig, file_path: Path, *, title: s
             raise RuntimeError(f"Slack upload failed: {response or exc}") from exc
 
     await asyncio.to_thread(_upload)
-    print(f"{utc_stamp()} slack: uploaded {file_path}", file=sys.stderr, flush=True)
+    print(f"{log_stamp()} slack: uploaded {file_path}", file=sys.stderr, flush=True)
     return True

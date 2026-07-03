@@ -9,7 +9,7 @@ from typing import Any
 
 from .ai_client import AiClient
 from .config import AppConfig
-from .ffmpeg_utils import SegmentLogEvent, extract_jpeg_frames, utc_stamp
+from .ffmpeg_utils import SegmentLogEvent, extract_jpeg_frames, log_stamp
 from .hls import HlsPlaylist, HlsSegment, load_m3u8
 from .recording import RecordingManager
 
@@ -45,7 +45,7 @@ class M3u8LoadingTask:
 
     def _progress(self, message: str) -> None:
         if self.config.frames.echo_m3u8_progress_logs:
-            print(f"{utc_stamp()} m3u8-loader: {message}", file=sys.stderr, flush=True)
+            print(f"{log_stamp()} m3u8-loader: {message}", file=sys.stderr, flush=True)
 
     async def run(self) -> None:
         while True:
@@ -81,7 +81,7 @@ class M3u8LoadingTask:
 
         if playlist.media_sequence > self.last_processed_sequence + 1:
             print(
-                f"{utc_stamp()} m3u8-loader: warning: source playlist advanced from seq "
+                f"{log_stamp()} m3u8-loader: warning: source playlist advanced from seq "
                 f"{self.last_processed_sequence + 1} to {playlist.media_sequence}; unprocessed segments were lost",
                 file=sys.stderr,
                 flush=True,
@@ -91,7 +91,7 @@ class M3u8LoadingTask:
         unprocessed = [s for s in playlist.segments if s.sequence > self.last_processed_sequence]
         if len(unprocessed) >= 2:
             print(
-                f"{utc_stamp()} m3u8-loader: warning: {len(unprocessed)} unprocessed segments are queued; "
+                f"{log_stamp()} m3u8-loader: warning: {len(unprocessed)} unprocessed segments are queued; "
                 "consider increasing retain_segments or reducing AI latency",
                 file=sys.stderr,
                 flush=True,
@@ -126,12 +126,12 @@ class M3u8LoadingTask:
         try:
             segment_path = segment.resolved_path(self.config.source_playlist_path)
         except ValueError as exc:
-            print(f"{utc_stamp()} m3u8-loader: {exc}", file=sys.stderr, flush=True)
+            print(f"{log_stamp()} m3u8-loader: {exc}", file=sys.stderr, flush=True)
             return
 
         if not segment_path.exists():
             print(
-                f"{utc_stamp()} m3u8-loader: warning: segment file is missing: seq={segment.sequence} {segment_path}",
+                f"{log_stamp()} m3u8-loader: warning: segment file is missing: seq={segment.sequence} {segment_path}",
                 file=sys.stderr,
                 flush=True,
             )
@@ -150,7 +150,7 @@ class M3u8LoadingTask:
             )
         except Exception as exc:
             print(
-                f"{utc_stamp()} m3u8-loader: frame extraction failed for seq={segment.sequence}: {exc!r}",
+                f"{log_stamp()} m3u8-loader: frame extraction failed for seq={segment.sequence}: {exc!r}",
                 file=sys.stderr,
                 flush=True,
             )
@@ -199,7 +199,7 @@ class M3u8LoadingTask:
             )
         except Exception as exc:
             print(
-                f"{utc_stamp()} m3u8-loader: AI request failed for frame={frame.frame_id}: {exc!r}",
+                f"{log_stamp()} m3u8-loader: AI request failed for frame={frame.frame_id}: {exc!r}",
                 file=sys.stderr,
                 flush=True,
             )
@@ -208,7 +208,7 @@ class M3u8LoadingTask:
         frame.analysis = analysis
         if not analysis.get("ok"):
             print(
-                f"{utc_stamp()} m3u8-loader: AI error for frame={frame.frame_id}: {analysis.get('error')}",
+                f"{log_stamp()} m3u8-loader: AI error for frame={frame.frame_id}: {analysis.get('error')}",
                 file=sys.stderr,
                 flush=True,
             )
@@ -216,7 +216,7 @@ class M3u8LoadingTask:
 
         if analysis.get("has_target"):
             print(
-                f"{utc_stamp()} m3u8-loader: target detected frame={frame.frame_id} "
+                f"{log_stamp()} m3u8-loader: target detected frame={frame.frame_id} "
                 f"detections={analysis.get('detections')}",
                 file=sys.stderr,
                 flush=True,
