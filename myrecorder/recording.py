@@ -220,6 +220,10 @@ class HlsRecordingTask:
             while True:
                 playlist = load_m3u8(self.config.source_playlist_path)
                 if playlist is not None:
+                    if self._source_sequence_rewound(state, playlist):
+                        append_lines(state.playlist_path, ["#EXT-X-ENDLIST"])
+                        await self.manager.mark_capture_closed(self.recording_id)
+                        return
                     self._copy_and_append_new_segments(state, playlist)
 
                 end_time = await self.manager.get_end_time()
@@ -232,6 +236,22 @@ class HlsRecordingTask:
         except Exception:
             await self.manager.mark_capture_closed(self.recording_id)
             raise
+
+    def _source_sequence_rewound(self, state: RecordingState, playlist: HlsPlaylist) -> bool:
+        if not state.copied_sequences or playlist.last_sequence is None:
+            return False
+        last_copied_sequence = max(state.copied_sequences)
+        if playlist.last_sequence >= last_copied_sequence:
+            return False
+        print(
+            f"{utc_stamp()} recording: warning: source playlist sequence rewound during "
+            f"recording {state.recording_id} from copied seq {last_copied_sequence} "
+            f"to source seq {playlist.media_sequence}-{playlist.last_sequence}; "
+            "closing current clip so future detections can start a new Slack upload",
+            file=sys.stderr,
+            flush=True,
+        )
+        return True
 
     def _copy_and_append_new_segments(self, state: RecordingState, playlist: HlsPlaylist) -> None:
         new_segments = [segment for segment in playlist.segments if segment.sequence not in state.copied_sequences]
