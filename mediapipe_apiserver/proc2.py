@@ -6,6 +6,7 @@ import base64
 import sys
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from io import BytesIO
@@ -13,9 +14,8 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from aiohttp import web
 from PIL import Image, ImageOps
-
-from .ipc import IpcProtocolError, read_json_message, write_json_message
 
 try:
     import mediapipe as mp
@@ -29,12 +29,13 @@ def utc_stamp() -> str:
 
 @dataclass(frozen=True)
 class ServerConfig:
-    socket_path: Path
-    model_path: Path
+    host: str = "127.0.0.1"
+    port: int = 8080
+    model_path: Path = Path("models/efficientdet_lite0.tflite")
     target_objects: list[str] = field(default_factory=lambda: ["cat"])
     score_threshold: float = 0.4
     max_results: int = -1
-    max_message_bytes: int = 20 * 1024 * 1024
+    max_request_bytes: int = 20 * 1024 * 1024
 
 
 def category_name(category: Any) -> str:
@@ -98,7 +99,7 @@ class DetectorPool:
         detector = self._detectors.get(key)
         if detector is None:
             print(
-                f"{utc_stamp()} mediapipe-socket: creating detector targets={targets!r} threshold={threshold}",
+                f"{utc_stamp()} mediapipe-http: creating detector targets={targets!r} threshold={threshold}",
                 file=sys.stderr,
                 flush=True,
             )
@@ -133,78 +134,68 @@ class DetectorPool:
         }
 
 
-class MediaPipeSocketServer:
+class MediaPipeHttpServer:
     def __init__(self, config: ServerConfig) -> None:
         self.config = config
         self.detectors = DetectorPool(config)
-        self._server: asyncio.AbstractServer | None = None
+        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mediapipe")
 
-    async def start(self) -> None:
-        if not self.config.model_path.exists():
-            raise FileNotFoundError(f"model_path does not exist: {self.config.model_path}")
-        self.config.socket_path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            self.config.socket_path.unlink()
-        except FileNotFoundError:
-            pass
-        self._server = await asyncio.start_unix_server(self.handle_client, path=str(self.config.socket_path))
-        print(f"{utc_stamp()} mediapipe-socket: listening on {self.config.socket_path}", file=sys.stderr, flush=True)
+    def make_app(self) -> web.Application:
+        app = web.Application(client_max_size=self.config.max_request_bytes)
+        app["server"] = self
+        app.router.add_get("/health", self.handle_health)
+        app.router.add_post("/v1/analyze-frame", self.handle_analyze_frame)
+        app.on_cleanup.append(self.cleanup)
+        return app
 
-    async def serve_forever(self) -> None:
-        await self.start()
-        assert self._server is not None
-        async with self._server:
-            await self._server.serve_forever()
+    async def run_detection(self, image_bytes: bytes, targets: list[str], threshold: float) -> dict[str, Any]:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(self._executor, self.detectors.detect, image_bytes, targets, threshold)
 
-    async def close(self) -> None:
-        if self._server is not None:
-            self._server.close()
-            await self._server.wait_closed()
+    async def cleanup(self, app: web.Application) -> None:
         self.detectors.close()
+        self._executor.shutdown(wait=True, cancel_futures=True)
+
+    async def handle_health(self, request: web.Request) -> web.Response:
+        return web.json_response({"ok": True})
+
+    async def handle_analyze_frame(self, request: web.Request) -> web.Response:
         try:
-            self.config.socket_path.unlink()
-        except FileNotFoundError:
-            pass
+            message = await request.json()
+        except Exception as exc:
+            return web.json_response({"ok": False, "error": f"invalid JSON request: {exc}"}, status=400)
 
-    async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        try:
-            while True:
-                message = await read_json_message(reader, max_bytes=self.config.max_message_bytes)
-                if message is None:
-                    return
-                response = await self.handle_message(message)
-                await write_json_message(writer, response)
-        except IpcProtocolError as exc:
-            await write_json_message(writer, {"ok": False, "error": f"protocol_error: {exc}"})
-        except Exception as exc:  # pragma: no cover - safety net for long-running daemon
-            try:
-                await write_json_message(writer, {"ok": False, "error": repr(exc)})
-            except Exception:
-                pass
-        finally:
-            writer.close()
-            await writer.wait_closed()
+        if not isinstance(message, dict):
+            return web.json_response({"ok": False, "error": "JSON request body must be an object"}, status=400)
 
-    async def handle_message(self, message: dict[str, Any]) -> dict[str, Any]:
-        if message.get("type") != "analyze_frame":
-            return {"ok": False, "request_id": message.get("request_id"), "error": "unknown message type"}
+        response, status = await self.handle_message(message)
+        return web.json_response(response, status=status)
 
+    async def handle_message(self, message: dict[str, Any]) -> tuple[dict[str, Any], int]:
         request_id = message.get("request_id")
         targets = message.get("targets") or self.config.target_objects
         if not isinstance(targets, list) or not all(isinstance(x, str) for x in targets):
-            return {"ok": False, "request_id": request_id, "error": "targets must be a string list"}
-        threshold = float(message.get("score_threshold", self.config.score_threshold))
+            return {"ok": False, "request_id": request_id, "error": "targets must be a string list"}, 400
+
+        try:
+            threshold = float(message.get("score_threshold", self.config.score_threshold))
+        except (TypeError, ValueError):
+            return {"ok": False, "request_id": request_id, "error": "score_threshold must be a number"}, 400
 
         image_b64 = message.get("image_base64")
         if not isinstance(image_b64, str):
-            return {"ok": False, "request_id": request_id, "error": "image_base64 is required"}
+            return {"ok": False, "request_id": request_id, "error": "image_base64 is required"}, 400
         try:
             image_bytes = base64.b64decode(image_b64, validate=True)
         except Exception as exc:
-            return {"ok": False, "request_id": request_id, "error": f"invalid image_base64: {exc}"}
+            return {"ok": False, "request_id": request_id, "error": f"invalid image_base64: {exc}"}, 400
 
         started = time.perf_counter()
-        result = await asyncio.to_thread(self.detectors.detect, image_bytes, targets, threshold)
+        try:
+            result = await self.run_detection(image_bytes, targets, threshold)
+        except Exception as exc:  # pragma: no cover - safety net for long-running daemon
+            return {"ok": False, "request_id": request_id, "error": repr(exc)}, 500
+
         elapsed_ms = (time.perf_counter() - started) * 1000.0
         return {
             "ok": True,
@@ -215,7 +206,7 @@ class MediaPipeSocketServer:
             "score_threshold": threshold,
             "processing_ms": elapsed_ms,
             **result,
-        }
+        }, 200
 
 
 def _csv(value: str) -> list[str]:
@@ -223,8 +214,9 @@ def _csv(value: str) -> list[str]:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Serve MediaPipe object detection over an AF_UNIX socket")
-    parser.add_argument("--socket-path", type=Path, required=True, help="Unix socket path to listen on")
+    parser = argparse.ArgumentParser(description="Serve MediaPipe object detection over HTTP")
+    parser.add_argument("--host", default="127.0.0.1", help="Host/IP address to bind. Defaults to 127.0.0.1")
+    parser.add_argument("--port", type=int, default=8080, help="TCP port to bind. Defaults to 8080")
     parser.add_argument("--model-path", type=Path, required=True, help="MediaPipe .tflite model path")
     parser.add_argument(
         "--target-object",
@@ -242,36 +234,31 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--score-threshold", type=float, default=0.4, help="Minimum detection score")
     parser.add_argument("--max-results", type=int, default=-1, help="Maximum MediaPipe detection results")
-    parser.add_argument("--max-message-bytes", type=int, default=20 * 1024 * 1024, help="Maximum IPC message size")
+    parser.add_argument("--max-request-bytes", type=int, default=20 * 1024 * 1024, help="Maximum HTTP request size")
     return parser.parse_args(argv)
 
 
 def config_from_args(args: argparse.Namespace) -> ServerConfig:
     target_objects = args.target_objects_csv or args.target_object_list or ["cat"]
     return ServerConfig(
-        socket_path=args.socket_path.expanduser().resolve(),
+        host=args.host,
+        port=args.port,
         model_path=args.model_path.expanduser().resolve(),
         target_objects=target_objects,
         score_threshold=args.score_threshold,
         max_results=args.max_results,
-        max_message_bytes=args.max_message_bytes,
+        max_request_bytes=args.max_request_bytes,
     )
 
 
-async def amain(argv: list[str] | None = None) -> int:
-    server = MediaPipeSocketServer(config_from_args(parse_args(argv)))
-    try:
-        await server.serve_forever()
-    finally:
-        await server.close()
-    return 0
+def main(argv: list[str] | None = None) -> None:
+    config = config_from_args(parse_args(argv))
+    if not config.model_path.exists():
+        raise SystemExit(f"model_path does not exist: {config.model_path}")
 
-
-def main() -> None:
-    try:
-        raise SystemExit(asyncio.run(amain()))
-    except KeyboardInterrupt:
-        raise SystemExit(130)
+    server = MediaPipeHttpServer(config)
+    print(f"{utc_stamp()} mediapipe-http: listening on http://{config.host}:{config.port}", file=sys.stderr, flush=True)
+    web.run_app(server.make_app(), host=config.host, port=config.port)
 
 
 if __name__ == "__main__":
