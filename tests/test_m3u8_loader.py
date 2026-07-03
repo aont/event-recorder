@@ -30,7 +30,7 @@ def make_config(base_dir: Path) -> AppConfig:
         rtsp=RtspConfig(url="rtsp://camera.local/stream"),
         hls=HlsConfig(),
         frames=FrameConfig(),
-        ai=AiConfig(model_path=base_dir / "model.tflite"),
+        ai=AiConfig(),
         recording=RecordingConfig(poll_interval_seconds=0.01),
         slack=SlackConfig(),
     )

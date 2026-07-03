@@ -1,11 +1,11 @@
 # Event Recorder
 
-A Python RTSP camera recorder that converts streams to HLS, detects target objects with MediaPipe EfficientDet, and records event clips. When an event is detected, it can capture video retroactively from before the detection time, convert clips to MP4, and optionally upload them to Slack.
+A Python RTSP camera recorder that converts streams to HLS, detects target objects through an aiohttp connection to detection-server, and records event clips. When an event is detected, it can capture video retroactively from before the detection time, convert clips to MP4, and optionally upload them to Slack.
 
 Single-command implementation:
 
 - `myrecorder`: RTSP → HLS with `asyncio.subprocess`, m3u8 loading, frame extraction, AI trigger handling, HLS clip capture, MP4 conversion, optional Slack upload.
-- MediaPipe EfficientDet inference runs from `myrecorder` through `concurrent.futures.ProcessPoolExecutor`.
+- Object detection runs in a separate `detection-server` process; `myrecorder` calls its multipart HTTP API with `aiohttp`.
 
 The code targets Python 3.11+ on Linux/macOS. Hard links are POSIX features.
 
@@ -16,8 +16,7 @@ myrecorder/
   config.py              TOML config loader
   ffmpeg_utils.py        ffmpeg process helpers, HLS task, frame extraction
   hls.py                 lightweight HLS m3u8 parser/writer helpers
-  ai_worker.py           MediaPipe detector code executed in worker processes
-  ai_client.py           asyncio facade over ProcessPoolExecutor
+  ai_client.py           aiohttp client for detection-server over TCP or Unix sockets
   m3u8_loader.py         source playlist loader and frame analyzer
   recording.py           triggered HLS capture, MP4 conversion, Slack upload
   app.py                 myrecorder entrypoint
@@ -26,7 +25,6 @@ requirements.txt
 pyproject.toml
 ```
 
-`ipc.py` may remain in older source trees for compatibility tests, but runtime no longer uses AF_UNIX.
 
 ## Setup
 
@@ -72,16 +70,21 @@ or:
 
 You also need an `ffmpeg` binary in `PATH`, or set `[hls].ffmpeg_bin`.
 
-## Model file
+## Detection server
 
-Place `efficientdet_lite0.tflite` where `[ai].model_path` points. The model is not bundled in this repository.
-
-Example:
+Run [aont/detection-server](https://github.com/aont/detection-server) separately and point `[ai]` at it. The server exposes `POST /v1/detect` and accepts multipart fields named `image` and `config`. It can listen on TCP:
 
 ```bash
-mkdir -p models
-# put efficientdet_lite0.tflite at models/efficientdet_lite0.tflite
+python server.py --model ./efficientdet_lite0.tflite --host 127.0.0.1 --port 8080
 ```
+
+Or on a Unix domain socket:
+
+```bash
+python server.py --model ./efficientdet_lite0.tflite --unix-socket /tmp/detection-server.sock
+```
+
+The detector model and inference dependencies belong to `detection-server`; they are no longer installed or loaded by this recorder.
 
 ## Configure
 
@@ -109,7 +112,8 @@ Minimum required changes:
 url = "rtsp://camera-or-nvr/stream"
 
 [ai]
-model_path = "./models/efficientdet_lite0.tflite"
+server_url = "http://127.0.0.1:8080"
+# unix_socket_path = "/tmp/detection-server.sock"
 target_objects = ["cat"]
 score_threshold = 0.4
 ```
@@ -178,20 +182,19 @@ For each unprocessed segment, `myrecorder`:
 3. Extracts JPEG frames every `[frames].tc_seconds` using ffmpeg image2pipe.
 4. Stores frame bytes in memory.
 5. Optionally writes frame JPEGs to `[paths].frame_storage_dir`.
-6. Submits each frame to a `ProcessPoolExecutor` MediaPipe worker through an asyncio-compatible facade.
+6. Submits each frame to detection-server via `aiohttp` through an asyncio-compatible facade.
 7. Deletes derived frame images for segments no longer present in the source playlist when enabled.
 
 Frame timestamps are derived from `#EXT-X-PROGRAM-DATE-TIME` plus the frame offset in the segment. If a segment lacks program date-time, the loader falls back to current UTC time for that segment.
 
 ### AI execution model
 
-`myrecorder` creates a `concurrent.futures.ProcessPoolExecutor` with the `AiConfig.workers` Python constant. Each worker initializes its own MediaPipe `ObjectDetector` from `[ai].model_path` and caches detectors by target/threshold.
+`myrecorder` keeps object detection out of the recorder process. It sends each JPEG frame to detection-server with multipart/form-data containing:
 
-The main process remains asyncio-driven. Frame analysis is awaited with:
+- `image`: the JPEG bytes extracted from ffmpeg.
+- `config`: JSON containing `object_detector_options.score_threshold`, `max_results`, and `category_allowlist` from `[ai].target_objects`.
 
-```text
-asyncio event loop -> run_in_executor(ProcessPoolExecutor, MediaPipe detection)
-```
+For TCP servers, set `[ai].server_url`, for example `http://127.0.0.1:8080`. For Unix socket servers, set `[ai].unix_socket_path`; the client uses `aiohttp.UnixConnector` and sends requests to `http://localhost/v1/detect` through that socket.
 
 If detection exceeds `[ai].timeout_seconds`, the frame request is treated as failed and the recorder continues.
 
@@ -247,7 +250,7 @@ By default, `myrecorder` consumes ffmpeg stdout/stderr internally but does not e
 
 ## Notes and limitations
 
-- This is a reference implementation. In this environment it was syntax-checked and parser smoke-tested, but not exercised against a real RTSP camera, ffmpeg binary, MediaPipe model, or Slack workspace.
+- This is a reference implementation. In this environment it was syntax-checked and parser smoke-tested, but not exercised against a real RTSP camera, ffmpeg binary, detection-server instance, or Slack workspace.
 - The default ffmpeg stream args use codec copy. Some RTSP streams require transcoding or bitstream filters; change the `HlsConfig.stream_args` / `HlsConfig.output_args` Python constants as needed.
 - The lightweight m3u8 parser covers the tags this system emits and consumes. It is not a full RFC 8216 parser.
 - Hard links require source and destination to be on the same filesystem. The fallback copy is included to avoid losing recordings when deployment paths cross filesystem boundaries.

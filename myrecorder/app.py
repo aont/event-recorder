@@ -27,12 +27,12 @@ async def amain(argv: list[str] | None = None) -> int:
 
     segment_events: asyncio.Queue[SegmentLogEvent] = asyncio.Queue()
     ai_client = AiClient(
-        model_path=config.ai.model_path,
+        server_url=config.ai.server_url,
+        unix_socket_path=config.ai.unix_socket_path,
         targets=config.ai.target_objects,
         score_threshold=config.ai.score_threshold,
         timeout_seconds=config.ai.timeout_seconds,
         max_results=config.ai.max_results,
-        workers=config.ai.workers,
     )
     ai_client.start()
     recording_manager = RecordingManager(config)

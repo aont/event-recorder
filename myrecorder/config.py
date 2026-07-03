@@ -140,23 +140,24 @@ class FrameConfig:
 
 @dataclass(frozen=True)
 class AiConfig:
-    model_path: Path = Path("models/efficientdet_lite0.tflite")
+    server_url: str = "http://127.0.0.1:8080"
+    unix_socket_path: Path | None = None
     target_objects: list[str] = field(default_factory=lambda: ["cat"])
     score_threshold: float = 0.4
     timeout_seconds: float = 20.0
     max_results: int = -1
-    workers: int = 1
 
     @classmethod
     def from_toml(cls, data: Mapping[str, Any], base_dir: Path) -> "AiConfig":
         default = cls()
+        socket_value = data.get("unix_socket_path")
         return cls(
-            model_path=_path(data.get("model_path", default.model_path), base_dir),
+            server_url=str(data.get("server_url", default.server_url)).rstrip("/"),
+            unix_socket_path=_path(socket_value, base_dir) if socket_value else None,
             target_objects=_list(data.get("target_objects"), default.target_objects),
             score_threshold=float(data.get("score_threshold", default.score_threshold)),
             timeout_seconds=float(data.get("timeout_seconds", default.timeout_seconds)),
             max_results=int(data.get("max_results", default.max_results)),
-            workers=default.workers,
         )
 
 
@@ -265,7 +266,5 @@ class AppConfig:
             raise ValueError("[hls].retain_segments must be > 0")
         if self.hls.restart_sleep_seconds < 0:
             raise ValueError("[hls].restart_sleep_seconds must be >= 0")
-        if self.ai.workers <= 0:
-            raise ValueError("[ai].workers must be > 0")
-        if not self.ai.model_path.exists():
-            raise FileNotFoundError(f"[ai].model_path does not exist: {self.ai.model_path}")
+        if not self.ai.server_url:
+            raise ValueError("[ai].server_url must not be empty")

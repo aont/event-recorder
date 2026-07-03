@@ -25,10 +25,10 @@ def test_paths_config_has_no_work_dir() -> None:
     assert "work_dir" not in PathsConfig.__dataclass_fields__
 
 
-def test_ai_config_has_no_socket_path() -> None:
+def test_ai_config_supports_unix_socket_path() -> None:
     from myrecorder.config import AiConfig
 
-    assert "socket_path" not in AiConfig.__dataclass_fields__
+    assert "unix_socket_path" in AiConfig.__dataclass_fields__
 
 
 def test_app_config_uses_defaults_when_optional_sections_are_omitted(tmp_path: Path) -> None:
@@ -44,7 +44,8 @@ def test_app_config_uses_defaults_when_optional_sections_are_omitted(tmp_path: P
     assert config.paths.frame_storage_dir == tmp_path / "frames"
     assert config.hls.ffmpeg_bin == "ffmpeg"
     assert config.hls.restart_sleep_seconds == 5.0
-    assert config.ai.model_path == tmp_path / "models" / "efficientdet_lite0.tflite"
+    assert config.ai.server_url == "http://127.0.0.1:8080"
+    assert config.ai.unix_socket_path is None
     assert config.slack.initial_comment == ""
 
 

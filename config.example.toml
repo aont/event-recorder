@@ -24,7 +24,8 @@ delete_frames_for_deleted_segments = true
 skip_existing_segments_on_start = false
 
 [ai]
-model_path = "./models/efficientdet_lite0.tflite"
+server_url = "http://127.0.0.1:8080"
+# unix_socket_path = "/tmp/detection-server.sock"
 target_objects = ["cat"]
 score_threshold = 0.4
 timeout_seconds = 20.0

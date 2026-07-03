@@ -26,7 +26,7 @@ def make_config(source_hls_dir):
         rtsp=RtspConfig(url="rtsp://camera.local/stream"),
         hls=HlsConfig(restart_sleep_seconds=0),
         frames=FrameConfig(),
-        ai=AiConfig(model_path=source_hls_dir.parent / "model.tflite"),
+        ai=AiConfig(),
         recording=RecordingConfig(),
         slack=SlackConfig(),
     )
