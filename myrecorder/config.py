@@ -117,7 +117,8 @@ class HlsConfig:
 
     @property
     def hls_flags_arg(self) -> str:
-        return "+".join(self.hls_flags)
+        flags = list(dict.fromkeys([*self.hls_flags, "append_list"]))
+        return "+".join(flags)
 
 
 @dataclass(frozen=True)

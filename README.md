@@ -147,10 +147,11 @@ myrecorder --config config.toml
 -hls_list_size <retain_segments>
 -hls_delete_threshold <delete_threshold>
 -hls_start_number_source <start_number_source>
--hls_flags delete_segments+program_date_time+temp_file
+-start_number <next_non_overlapping_segment_number>
+-hls_flags delete_segments+program_date_time+temp_file+append_list
 ```
 
-The playlist is treated as the source of truth. FFmpeg stdout/stderr are still drained, and segment-like `Opening ...` log lines wake the m3u8 loader. By default, these ffmpeg logs are not echoed; set `[hls].echo_ffmpeg_logs = true` for debugging. If the RTSP ffmpeg process exits unexpectedly, `myrecorder` keeps running, clears `[paths].source_hls_dir` to remove stale playlists/segments, and restarts ffmpeg after `[hls].restart_sleep_seconds` (default `5.0`).
+The playlist is treated as the source of truth. FFmpeg stdout/stderr are still drained, and segment-like `Opening ...` log lines wake the m3u8 loader. By default, these ffmpeg logs are not echoed; set `[hls].echo_ffmpeg_logs = true` for debugging. If the RTSP ffmpeg process exits unexpectedly, `myrecorder` keeps running, preserves `[paths].source_hls_dir`, and restarts ffmpeg after `[hls].restart_sleep_seconds` (default `5.0`). On each launch, ffmpeg receives `-start_number` set to one greater than the highest existing source segment number so restarted HLS output does not overlap with existing segment files.
 
 ### m3u8-loader progress logging
 
@@ -249,4 +250,4 @@ echo_ffmpeg_logs = true
 - The default ffmpeg stream args use codec copy. Some RTSP streams require transcoding or bitstream filters; override `[hls].stream_args` / `[hls].output_args` as needed.
 - The lightweight m3u8 parser covers the tags this system emits and consumes. It is not a full RFC 8216 parser.
 - Hard links require source and destination to be on the same filesystem. The fallback copy is included to avoid losing recordings when deployment paths cross filesystem boundaries.
-- `myrecorder` cleans `[paths].source_hls_dir` on startup by default. Disable startup cleanup with `[hls].clean_source_on_start = false` if you need to preserve that directory before the first ffmpeg launch. The directory is still cleaned before ffmpeg restarts after an unexpected exit so stale HLS state is not reused.
+- `myrecorder` cleans `[paths].source_hls_dir` on startup by default. Disable startup cleanup with `[hls].clean_source_on_start = false` if you need to preserve that directory before the first ffmpeg launch. The directory is preserved across ffmpeg restarts; restarted ffmpeg processes append to the existing playlist and use a non-overlapping segment start number.

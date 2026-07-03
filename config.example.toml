@@ -20,7 +20,7 @@ segment_seconds = 2.0
 retain_segments = 10
 delete_threshold = 2
 start_number_source = "generic"
-hls_flags = ["delete_segments", "program_date_time", "temp_file"]
+hls_flags = ["delete_segments", "program_date_time", "temp_file", "append_list"]
 loglevel = "info"
 # By default, ffmpeg stdout/stderr are consumed internally but not echoed to this process' stdout/stderr.
 # Set true for debugging ffmpeg HLS/conversion output.

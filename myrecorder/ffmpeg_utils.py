@@ -7,7 +7,7 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Awaitable, Callable, TextIO, Sequence
+from typing import Awaitable, Callable, TextIO
 
 from .config import AppConfig
 
@@ -59,6 +59,34 @@ def clean_source_hls_dir(path: Path) -> None:
     print(f"{utc_stamp()} app: cleaned source HLS dir {path}", file=sys.stderr, flush=True)
 
 
+def _segment_number_regex(segment_pattern: str) -> re.Pattern[str] | None:
+    match = re.search(r"%(?:0\d+)?d", segment_pattern)
+    if match is None:
+        return None
+    prefix = re.escape(segment_pattern[: match.start()])
+    suffix = re.escape(segment_pattern[match.end() :])
+    return re.compile(f"^{prefix}(?P<number>\\d+){suffix}$")
+
+
+def next_hls_start_number(source_hls_dir: Path, segment_pattern: str) -> int:
+    pattern = _segment_number_regex(segment_pattern)
+    if pattern is None or not source_hls_dir.exists():
+        return 0
+
+    max_number: int | None = None
+    for child in source_hls_dir.iterdir():
+        if not child.is_file():
+            continue
+        match = pattern.match(child.name)
+        if match is None:
+            continue
+        number = int(match.group("number"))
+        max_number = number if max_number is None else max(max_number, number)
+    if max_number is None:
+        return 0
+    return max_number + 1
+
+
 class FfmpegHlsTask:
     def __init__(self, config: AppConfig, segment_events: asyncio.Queue[SegmentLogEvent]) -> None:
         self.config = config
@@ -68,8 +96,12 @@ class FfmpegHlsTask:
         self._stopping = False
         self._stop_event = asyncio.Event()
 
+    def _next_start_number(self) -> int:
+        return next_hls_start_number(self.config.paths.source_hls_dir, self.config.hls.segment_pattern)
+
     def command(self) -> list[str]:
         cfg = self.config
+        start_number = self._next_start_number()
         cmd: list[str] = [
             cfg.hls.ffmpeg_bin,
             "-hide_banner",
@@ -94,6 +126,8 @@ class FfmpegHlsTask:
                 str(cfg.hls.delete_threshold),
                 "-hls_start_number_source",
                 cfg.hls.start_number_source,
+                "-start_number",
+                str(start_number),
                 "-hls_flags",
                 cfg.hls.hls_flags_arg,
                 "-hls_segment_filename",
@@ -136,9 +170,10 @@ class FfmpegHlsTask:
                 await asyncio.wait_for(self._stop_event.wait(), timeout=sleep_seconds)
             except asyncio.TimeoutError:
                 pass
-            if not self._stopping:
-                clean_source_hls_dir(self.config.paths.source_hls_dir)
-                self._seen_log_paths.clear()
+            # Keep the existing source HLS files on restart. The next ffmpeg
+            # launch uses a start number beyond the existing segment files and
+            # append_list so the playlist can continue without overwriting or
+            # hiding previously generated segments.
         return 0
 
     async def _run_once(self) -> int:

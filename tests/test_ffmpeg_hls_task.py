@@ -12,7 +12,7 @@ from myrecorder.config import (
     RtspConfig,
     SlackConfig,
 )
-from myrecorder.ffmpeg_utils import FfmpegHlsTask, SegmentLogEvent
+from myrecorder.ffmpeg_utils import FfmpegHlsTask, SegmentLogEvent, next_hls_start_number
 
 
 def make_config(source_hls_dir):
@@ -33,13 +33,38 @@ def make_config(source_hls_dir):
     )
 
 
-def test_ffmpeg_restart_cleans_source_hls_dir(tmp_path):
+def test_next_hls_start_number_uses_next_existing_segment_number(tmp_path):
     source_hls_dir = tmp_path / "source-hls"
     source_hls_dir.mkdir()
-    (source_hls_dir / "live.m3u8").write_text("stale playlist")
+    (source_hls_dir / "segment_0000000003.ts").write_text("old segment")
+    (source_hls_dir / "segment_0000000011.ts").write_text("newest segment")
+    (source_hls_dir / "segment_0000000011.ts.tmp").write_text("ignored temp segment")
+    (source_hls_dir / "live.m3u8").write_text("ignored playlist")
+
+    assert next_hls_start_number(source_hls_dir, "segment_%010d.ts") == 12
+
+
+def test_ffmpeg_command_appends_to_existing_hls_with_non_overlapping_start_number(tmp_path):
+    source_hls_dir = tmp_path / "source-hls"
+    source_hls_dir.mkdir()
+    (source_hls_dir / "segment_0000000041.ts").write_text("old segment")
+
+    task = FfmpegHlsTask(make_config(source_hls_dir), asyncio.Queue[SegmentLogEvent]())
+
+    cmd = task.command()
+    assert cmd[cmd.index("-start_number") + 1] == "42"
+    assert "append_list" in cmd[cmd.index("-hls_flags") + 1].split("+")
+
+
+def test_ffmpeg_restart_preserves_source_hls_dir_and_seen_paths(tmp_path):
+    source_hls_dir = tmp_path / "source-hls"
+    source_hls_dir.mkdir()
+    playlist = source_hls_dir / "live.m3u8"
+    playlist.write_text("existing playlist")
     nested_dir = source_hls_dir / "nested"
     nested_dir.mkdir()
-    (nested_dir / "stale.ts").write_text("stale segment")
+    stale_segment = nested_dir / "stale.ts"
+    stale_segment.write_text("existing segment")
 
     class RestartingTask(FfmpegHlsTask):
         def __init__(self, *args, **kwargs):
@@ -49,10 +74,11 @@ def test_ffmpeg_restart_cleans_source_hls_dir(tmp_path):
         async def _run_once(self) -> int:
             self.runs += 1
             if self.runs == 1:
-                self._seen_log_paths.add((source_hls_dir / "live.m3u8").resolve())
+                self._seen_log_paths.add(playlist.resolve())
                 return 1
-            assert list(source_hls_dir.iterdir()) == []
-            assert self._seen_log_paths == set()
+            assert playlist.read_text() == "existing playlist"
+            assert stale_segment.read_text() == "existing segment"
+            assert self._seen_log_paths == {playlist.resolve()}
             self._stopping = True
             return 0
 
