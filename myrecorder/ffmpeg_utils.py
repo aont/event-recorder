@@ -5,7 +5,7 @@ import re
 import shutil
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Awaitable, Callable, TextIO, Sequence
 
@@ -16,8 +16,14 @@ LineCallback = Callable[[str], Awaitable[None] | None]
 _OPENING_RE = re.compile(r"Opening ['\"](?P<path>[^'\"]+)['\"]")
 
 
+def log_stamp() -> str:
+    # datetime.astimezone() with no argument uses the host process' local timezone.
+    return datetime.now().astimezone().isoformat(timespec="milliseconds")
+
+
 def utc_stamp() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+    # Backward-compatible alias for callers that imported the old helper name.
+    return log_stamp()
 
 
 async def pump_stream(
@@ -36,7 +42,7 @@ async def pump_stream(
             return
         text = raw.decode("utf-8", errors="replace").rstrip("\r\n")
         if output is not None:
-            print(f"{utc_stamp()} {process_name} {stream_name}: {text}", file=output, flush=True)
+            print(f"{log_stamp()} {process_name} {stream_name}: {text}", file=output, flush=True)
         if line_callback is not None:
             result = line_callback(text)
             if asyncio.iscoroutine(result):
@@ -56,7 +62,7 @@ def clean_source_hls_dir(path: Path) -> None:
             shutil.rmtree(child)
         else:
             child.unlink()
-    print(f"{utc_stamp()} app: cleaned source HLS dir {path}", file=sys.stderr, flush=True)
+    print(f"{log_stamp()} app: cleaned source HLS dir {path}", file=sys.stderr, flush=True)
 
 
 class FfmpegHlsTask:
@@ -127,7 +133,7 @@ class FfmpegHlsTask:
                 return returncode
             sleep_seconds = self.config.hls.restart_sleep_seconds
             print(
-                f"{utc_stamp()} app: ffmpeg HLS exited with code {returncode}; "
+                f"{log_stamp()} app: ffmpeg HLS exited with code {returncode}; "
                 f"restarting in {sleep_seconds:g}s",
                 file=sys.stderr,
                 flush=True,
@@ -143,7 +149,7 @@ class FfmpegHlsTask:
 
     async def _run_once(self) -> int:
         cmd = self.command()
-        print(f"{utc_stamp()} app: starting ffmpeg HLS: {' '.join(cmd)}", file=sys.stderr, flush=True)
+        print(f"{log_stamp()} app: starting ffmpeg HLS: {' '.join(cmd)}", file=sys.stderr, flush=True)
         self._proc = await asyncio.create_subprocess_exec(
             *cmd,
             cwd=str(self.config.paths.source_hls_dir),
@@ -171,7 +177,7 @@ class FfmpegHlsTask:
         try:
             returncode = await self._proc.wait()
             await asyncio.gather(stdout_task, stderr_task, return_exceptions=True)
-            print(f"{utc_stamp()} app: ffmpeg HLS exited with code {returncode}", file=sys.stderr, flush=True)
+            print(f"{log_stamp()} app: ffmpeg HLS exited with code {returncode}", file=sys.stderr, flush=True)
             return returncode
         finally:
             for task in (stdout_task, stderr_task):
@@ -257,7 +263,7 @@ async def run_ffmpeg_with_prefixed_logs(
     cwd: Path | None = None,
     echo_logs: bool = False,
 ) -> int:
-    print(f"{utc_stamp()} {process_name}: starting: {' '.join(map(str, cmd))}", file=sys.stderr, flush=True)
+    print(f"{log_stamp()} {process_name}: starting: {' '.join(map(str, cmd))}", file=sys.stderr, flush=True)
     proc = await asyncio.create_subprocess_exec(
         *map(str, cmd),
         cwd=str(cwd) if cwd else None,
@@ -273,7 +279,7 @@ async def run_ffmpeg_with_prefixed_logs(
     try:
         returncode = await proc.wait()
         await asyncio.gather(stdout_task, stderr_task, return_exceptions=True)
-        print(f"{utc_stamp()} {process_name}: exited with code {returncode}", file=sys.stderr, flush=True)
+        print(f"{log_stamp()} {process_name}: exited with code {returncode}", file=sys.stderr, flush=True)
         return returncode
     finally:
         for task in (stdout_task, stderr_task):

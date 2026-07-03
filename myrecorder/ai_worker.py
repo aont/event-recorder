@@ -10,7 +10,7 @@ from typing import Any
 import numpy as np
 from PIL import Image, ImageOps
 
-from .ffmpeg_utils import utc_stamp
+from .ffmpeg_utils import log_stamp
 
 try:
     import mediapipe as mp
@@ -75,7 +75,7 @@ class DetectorPool:
         detector = self._detectors.get(key)
         if detector is None:
             print(
-                f"{utc_stamp()} ai-worker: creating detector targets={targets!r} threshold={threshold}",
+                f"{log_stamp()} ai-worker: creating detector targets={targets!r} threshold={threshold}",
                 file=sys.stderr,
                 flush=True,
             )

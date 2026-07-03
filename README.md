@@ -236,6 +236,8 @@ use_local_time_for_filenames = false
 
 ## FFmpeg log output
 
+Log lines emitted by `myrecorder` use the host process' local timezone and include the numeric UTC offset, making logs line up with local operations and system logs.
+
 By default, `myrecorder` consumes ffmpeg stdout/stderr internally but does not echo ffmpeg log lines to the tool process stdout/stderr. This keeps runtime output quiet while still allowing segment-addition detection from ffmpeg logs. To debug ffmpeg output, set:
 
 ```toml

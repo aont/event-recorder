@@ -12,7 +12,7 @@ from typing import Any
 from urllib.parse import unquote, urlparse
 
 from .config import AppConfig
-from .ffmpeg_utils import run_ffmpeg_with_prefixed_logs, utc_stamp
+from .ffmpeg_utils import run_ffmpeg_with_prefixed_logs, log_stamp
 from .hls import HlsPlaylist, HlsSegment, append_lines, load_m3u8, strip_endlist
 from .slack_upload import upload_file_to_slack
 
@@ -44,7 +44,7 @@ def _hardlink_or_copy(src: Path, dst: Path) -> None:
     except OSError as exc:
         if exc.errno in {errno.EXDEV, errno.EPERM, errno.EACCES}:
             print(
-                f"{utc_stamp()} recording: hardlink failed ({exc}); falling back to copy2 for {src}",
+                f"{log_stamp()} recording: hardlink failed ({exc}); falling back to copy2 for {src}",
                 file=sys.stderr,
                 flush=True,
             )
@@ -80,7 +80,7 @@ class RecordingManager:
             if self._end_time is None or requested_end > self._end_time:
                 self._end_time = requested_end
                 print(
-                    f"{utc_stamp()} recording: end time updated to {self._end_time.isoformat()} "
+                    f"{log_stamp()} recording: end time updated to {self._end_time.isoformat()} "
                     f"from frame {analysis.get('frame_id')}",
                     file=sys.stderr,
                     flush=True,
@@ -94,7 +94,7 @@ class RecordingManager:
                 self._current_task = task
                 self._all_tasks.add(task)
                 task.add_done_callback(self._all_tasks.discard)
-                print(f"{utc_stamp()} recording: started task {recording_id}", file=sys.stderr, flush=True)
+                print(f"{log_stamp()} recording: started task {recording_id}", file=sys.stderr, flush=True)
 
     async def get_end_time(self) -> datetime | None:
         async with self._lock:
@@ -106,7 +106,7 @@ class RecordingManager:
                 self._current_task = None
                 self._current_recording_id = None
                 self._end_time = None
-                print(f"{utc_stamp()} recording: capture {recording_id} closed", file=sys.stderr, flush=True)
+                print(f"{log_stamp()} recording: capture {recording_id} closed", file=sys.stderr, flush=True)
 
     async def _run_recording(self, recording_id: int) -> None:
         task = HlsRecordingTask(self.config, self, recording_id)
@@ -115,7 +115,7 @@ class RecordingManager:
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            print(f"{utc_stamp()} recording: task {recording_id} failed: {exc!r}", file=sys.stderr, flush=True)
+            print(f"{log_stamp()} recording: task {recording_id} failed: {exc!r}", file=sys.stderr, flush=True)
             await self.mark_capture_closed(recording_id)
 
     async def close(self) -> None:
@@ -150,14 +150,14 @@ class HlsRecordingTask:
             return
         except Exception as exc:
             print(
-                f"{utc_stamp()} recording: warning: uploaded recording directory cleanup failed "
+                f"{log_stamp()} recording: warning: uploaded recording directory cleanup failed "
                 f"for {destination_dir}: {exc!r}",
                 file=sys.stderr,
                 flush=True,
             )
             return
         print(
-            f"{utc_stamp()} recording: deleted uploaded recording directory {destination_dir}",
+            f"{log_stamp()} recording: deleted uploaded recording directory {destination_dir}",
             file=sys.stderr,
             flush=True,
         )
@@ -189,14 +189,14 @@ class HlsRecordingTask:
                     last_end = segment.end_time
             except FileNotFoundError:
                 print(
-                    f"{utc_stamp()} recording: source segment vanished before copy: seq={segment.sequence} uri={segment.uri}",
+                    f"{log_stamp()} recording: source segment vanished before copy: seq={segment.sequence} uri={segment.uri}",
                     file=sys.stderr,
                     flush=True,
                 )
 
         destination_playlist.write_text(strip_endlist(playlist.raw_text), encoding="utf-8")
         print(
-            f"{utc_stamp()} recording: copied initial playlist with {len(copied_sequences)} segments to {destination_dir}",
+            f"{log_stamp()} recording: copied initial playlist with {len(copied_sequences)} segments to {destination_dir}",
             file=sys.stderr,
             flush=True,
         )
@@ -242,7 +242,7 @@ class HlsRecordingTask:
             expected_next = max(state.copied_sequences) + 1
             if new_segments[0].sequence > expected_next:
                 print(
-                    f"{utc_stamp()} recording: warning: source playlist skipped from seq {expected_next} "
+                    f"{log_stamp()} recording: warning: source playlist skipped from seq {expected_next} "
                     f"to {new_segments[0].sequence}; retention may be too small",
                     file=sys.stderr,
                     flush=True,
@@ -255,7 +255,7 @@ class HlsRecordingTask:
                 self._copy_segment(segment, state.destination_dir)
             except FileNotFoundError:
                 print(
-                    f"{utc_stamp()} recording: warning: could not copy new segment seq={segment.sequence} uri={segment.uri}",
+                    f"{log_stamp()} recording: warning: could not copy new segment seq={segment.sequence} uri={segment.uri}",
                     file=sys.stderr,
                     flush=True,
                 )
@@ -269,7 +269,7 @@ class HlsRecordingTask:
         if append_batch:
             append_lines(state.playlist_path, append_batch)
             print(
-                f"{utc_stamp()} recording: appended {appended_count} source segments to {state.playlist_path}",
+                f"{log_stamp()} recording: appended {appended_count} source segments to {state.playlist_path}",
                 file=sys.stderr,
                 flush=True,
             )
@@ -284,7 +284,7 @@ class HlsRecordingTask:
     async def _convert_to_mp4(self, state: RecordingState) -> Path | None:
         if not self.config.recording.convert_to_mp4:
             print(
-                f"{utc_stamp()} recording: MP4 conversion disabled for {state.destination_dir}",
+                f"{log_stamp()} recording: MP4 conversion disabled for {state.destination_dir}",
                 file=sys.stderr,
                 flush=True,
             )
