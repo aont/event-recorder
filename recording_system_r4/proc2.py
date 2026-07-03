@@ -6,6 +6,8 @@ import base64
 import sys
 import threading
 import time
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -13,14 +15,26 @@ from typing import Any
 import numpy as np
 from PIL import Image, ImageOps
 
-from .config import AppConfig, Proc2Config
-from .ffmpeg_utils import utc_stamp
 from .ipc import IpcProtocolError, read_json_message, write_json_message
 
 try:
     import mediapipe as mp
 except ImportError as exc:  # pragma: no cover - runtime dependency
-    raise SystemExit("mediapipe is required for proc2. Install dependencies from requirements.txt") from exc
+    raise SystemExit("mediapipe is required. Install dependencies from requirements.txt") from exc
+
+
+def utc_stamp() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+@dataclass(frozen=True)
+class ServerConfig:
+    socket_path: Path
+    model_path: Path
+    target_objects: list[str] = field(default_factory=lambda: ["cat"])
+    score_threshold: float = 0.4
+    max_results: int = -1
+    max_message_bytes: int = 20 * 1024 * 1024
 
 
 def category_name(category: Any) -> str:
@@ -49,7 +63,7 @@ def load_image_bytes_as_mediapipe_srgb(image_bytes: bytes) -> Any:
 
 
 class DetectorPool:
-    def __init__(self, config: Proc2Config) -> None:
+    def __init__(self, config: ServerConfig) -> None:
         self.config = config
         self._detectors: dict[tuple[tuple[str, ...], float], Any] = {}
         self._lock = threading.Lock()
@@ -84,7 +98,7 @@ class DetectorPool:
         detector = self._detectors.get(key)
         if detector is None:
             print(
-                f"{utc_stamp()} proc2: creating detector targets={targets!r} threshold={threshold}",
+                f"{utc_stamp()} mediapipe-socket: creating detector targets={targets!r} threshold={threshold}",
                 file=sys.stderr,
                 flush=True,
             )
@@ -119,8 +133,8 @@ class DetectorPool:
         }
 
 
-class Proc2Server:
-    def __init__(self, config: Proc2Config) -> None:
+class MediaPipeSocketServer:
+    def __init__(self, config: ServerConfig) -> None:
         self.config = config
         self.detectors = DetectorPool(config)
         self._server: asyncio.AbstractServer | None = None
@@ -134,7 +148,7 @@ class Proc2Server:
         except FileNotFoundError:
             pass
         self._server = await asyncio.start_unix_server(self.handle_client, path=str(self.config.socket_path))
-        print(f"{utc_stamp()} proc2: listening on {self.config.socket_path}", file=sys.stderr, flush=True)
+        print(f"{utc_stamp()} mediapipe-socket: listening on {self.config.socket_path}", file=sys.stderr, flush=True)
 
     async def serve_forever(self) -> None:
         await self.start()
@@ -204,16 +218,48 @@ class Proc2Server:
         }
 
 
+def _csv(value: str) -> list[str]:
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Recording System r4 proc2: MediaPipe object detection over AF_UNIX")
-    parser.add_argument("--config", required=True, help="Path to TOML config")
+    parser = argparse.ArgumentParser(description="Serve MediaPipe object detection over an AF_UNIX socket")
+    parser.add_argument("--socket-path", type=Path, required=True, help="Unix socket path to listen on")
+    parser.add_argument("--model-path", type=Path, required=True, help="MediaPipe .tflite model path")
+    parser.add_argument(
+        "--target-object",
+        dest="target_object_list",
+        action="append",
+        default=None,
+        help="Allowed object label. Repeat for multiple labels. Defaults to cat.",
+    )
+    parser.add_argument(
+        "--target-objects",
+        dest="target_objects_csv",
+        type=_csv,
+        default=None,
+        help="Comma-separated allowed object labels. Overrides --target-object when set.",
+    )
+    parser.add_argument("--score-threshold", type=float, default=0.4, help="Minimum detection score")
+    parser.add_argument("--max-results", type=int, default=-1, help="Maximum MediaPipe detection results")
+    parser.add_argument("--max-message-bytes", type=int, default=20 * 1024 * 1024, help="Maximum IPC message size")
     return parser.parse_args(argv)
 
 
+def config_from_args(args: argparse.Namespace) -> ServerConfig:
+    target_objects = args.target_objects_csv or args.target_object_list or ["cat"]
+    return ServerConfig(
+        socket_path=args.socket_path.expanduser().resolve(),
+        model_path=args.model_path.expanduser().resolve(),
+        target_objects=target_objects,
+        score_threshold=args.score_threshold,
+        max_results=args.max_results,
+        max_message_bytes=args.max_message_bytes,
+    )
+
+
 async def amain(argv: list[str] | None = None) -> int:
-    args = parse_args(argv)
-    app_config = AppConfig.from_file(args.config)
-    server = Proc2Server(app_config.proc2)
+    server = MediaPipeSocketServer(config_from_args(parse_args(argv)))
     try:
         await server.serve_forever()
     finally:
