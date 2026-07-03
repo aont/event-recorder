@@ -151,7 +151,7 @@ myrecorder --config config.toml
 -hls_flags delete_segments+program_date_time+temp_file+append_list
 ```
 
-The playlist is treated as the source of truth. FFmpeg stdout/stderr are still drained, and segment-like `Opening ...` log lines wake the m3u8 loader. By default, these ffmpeg logs are not echoed; set `[hls].echo_ffmpeg_logs = true` for debugging. If the RTSP ffmpeg process exits unexpectedly, `myrecorder` keeps running, preserves `[paths].source_hls_dir`, and restarts ffmpeg after `[hls].restart_sleep_seconds` (default `5.0`). On each launch, ffmpeg receives `-start_number` set to one greater than the highest existing source segment number so restarted HLS output does not overlap with existing segment files.
+The playlist is treated as the source of truth. FFmpeg stdout/stderr are still drained, and segment-like `Opening ...` log lines wake the m3u8 loader. The m3u8 loader does not poll the playlist while waiting for new source segments; it processes the playlist only after a segment log wakeup. By default, these ffmpeg logs are not echoed; set `[hls].echo_ffmpeg_logs = true` for debugging. If the RTSP ffmpeg process exits unexpectedly, `myrecorder` keeps running, preserves `[paths].source_hls_dir`, and restarts ffmpeg after `[hls].restart_sleep_seconds` (default `5.0`). On each launch, ffmpeg receives `-start_number` set to one greater than the highest existing source segment number so restarted HLS output does not overlap with existing segment files.
 
 ### m3u8-loader progress logging
 
@@ -239,7 +239,7 @@ use_local_time_for_filenames = false
 
 Log lines emitted by `myrecorder` use the host process' local timezone and include the numeric UTC offset, making logs line up with local operations and system logs.
 
-By default, `myrecorder` consumes ffmpeg stdout/stderr internally but does not echo ffmpeg log lines to the tool process stdout/stderr. This keeps runtime output quiet while still allowing segment-addition detection from ffmpeg logs. To debug ffmpeg output, set:
+By default, `myrecorder` consumes ffmpeg stdout/stderr internally but does not echo ffmpeg log lines to the tool process stdout/stderr. This keeps runtime output quiet while still allowing segment-addition detection from ffmpeg logs, which is required to wake the m3u8 loader for new source segments. To debug ffmpeg output, set:
 
 ```toml
 [hls]

@@ -5,13 +5,15 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from .ai_client import AiClient
 from .config import AppConfig
 from .ffmpeg_utils import SegmentLogEvent, extract_jpeg_frames, log_stamp
 from .hls import HlsPlaylist, HlsSegment, load_m3u8
 from .recording import RecordingManager
+
+if TYPE_CHECKING:
+    from .ai_client import AiClient
 
 
 @dataclass(slots=True)
@@ -49,20 +51,10 @@ class M3u8LoadingTask:
 
     async def run(self) -> None:
         while True:
-            got_event = False
-            try:
-                event = await asyncio.wait_for(
-                    self.segment_events.get(),
-                    timeout=self.config.recording.poll_interval_seconds,
-                )
-                got_event = True
-                self._progress(f"segment log event: {event.path}")
-            except asyncio.TimeoutError:
-                pass
-
-            if got_event:
-                # Give FFmpeg a short interval to finish atomic playlist rename.
-                await asyncio.sleep(0.15)
+            event = await self.segment_events.get()
+            self._progress(f"segment log event: {event.path}")
+            # Give FFmpeg a short interval to finish atomic playlist rename.
+            await asyncio.sleep(0.15)
             await self.process_once()
 
     async def process_once(self) -> None:
