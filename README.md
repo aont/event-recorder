@@ -7,7 +7,7 @@ The code targets Python 3.11+ on Linux/macOS. AF_UNIX sockets are POSIX features
 ## Layout
 
 ```text
-recording_system_r4/
+mediapipe_apiserver/
   ipc.py       length-prefixed JSON AF_UNIX protocol
   proc2.py     MediaPipe object detector socket server
 requirements.txt
@@ -31,7 +31,7 @@ Place a MediaPipe object detection `.tflite` model on disk. For example, use `ef
 All configuration is passed with command-line arguments:
 
 ```bash
-python -m recording_system_r4.proc2 \
+python -m mediapipe_apiserver.proc2 \
   --socket-path /tmp/mediapipe-detector.sock \
   --model-path ./models/efficientdet_lite0.tflite \
   --target-object cat \
