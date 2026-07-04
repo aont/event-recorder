@@ -35,7 +35,7 @@ def test_app_config_uses_defaults_when_optional_sections_are_omitted(tmp_path: P
     from myrecorder.config import AppConfig
 
     config_path = tmp_path / "config.toml"
-    config_path.write_text("[rtsp]\nurl = 'rtsp://camera.local/stream'\n")
+    config_path.write_text("[input]\nffmpeg_argv = ['-i', 'rtsp://camera.local/stream']\n")
 
     config = AppConfig.from_file(config_path)
 

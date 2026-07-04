@@ -115,10 +115,7 @@ class FfmpegHlsTask:
             "-loglevel",
             cfg.hls.loglevel,
         ]
-        cmd.extend(cfg.rtsp.input_args)
-        if cfg.rtsp.transport:
-            cmd.extend(["-rtsp_transport", cfg.rtsp.transport])
-        cmd.extend(["-i", cfg.rtsp.url])
+        cmd.extend(cfg.input.ffmpeg_argv)
         cmd.extend(cfg.hls.stream_args)
         cmd.extend(
             [

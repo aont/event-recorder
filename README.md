@@ -108,8 +108,8 @@ frame_storage_dir = "frames"
 Minimum required changes:
 
 ```toml
-[rtsp]
-url = "rtsp://camera-or-nvr/stream"
+[input]
+ffmpeg_argv = ["-rtsp_transport", "tcp", "-i", "rtsp://camera-or-nvr/stream"]
 
 [ai]
 server_url = "http://127.0.0.1:8080"
@@ -251,7 +251,7 @@ By default, `myrecorder` consumes ffmpeg stdout/stderr internally but does not e
 ## Notes and limitations
 
 - This is a reference implementation. In this environment it was syntax-checked and parser smoke-tested, but not exercised against a real RTSP camera, ffmpeg binary, detection-server instance, or Slack workspace.
-- The default ffmpeg stream args use codec copy. Some RTSP streams require transcoding or bitstream filters; change the `HlsConfig.stream_args` / `HlsConfig.output_args` Python constants as needed.
+- The default ffmpeg stream args use codec copy. Some inputs require custom demuxer, transport, transcoding, or bitstream-filter options; configure ffmpeg input arguments with `[input].ffmpeg_argv` and change the `HlsConfig.stream_args` / `HlsConfig.output_args` Python constants as needed.
 - The lightweight m3u8 parser covers the tags this system emits and consumes. It is not a full RFC 8216 parser.
 - Hard links require source and destination to be on the same filesystem. The fallback copy is included to avoid losing recordings when deployment paths cross filesystem boundaries.
 - `myrecorder` cleans `[paths].source_hls_dir` on startup by default. Change the `HlsConfig.clean_source_on_start` Python constant if you need to preserve that directory before the first ffmpeg launch. The directory is preserved across ffmpeg restarts; restarted ffmpeg processes append to the existing playlist and use a non-overlapping segment start number.

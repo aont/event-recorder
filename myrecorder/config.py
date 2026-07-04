@@ -54,19 +54,12 @@ class PathsConfig:
 
 
 @dataclass(frozen=True)
-class RtspConfig:
-    url: str
-    transport: str = "tcp"
-    input_args: list[str] = field(default_factory=list)
+class InputConfig:
+    ffmpeg_argv: list[str] = field(default_factory=list)
 
     @classmethod
-    def from_toml(cls, data: Mapping[str, Any]) -> "RtspConfig":
-        url = str(data.get("url", "")).strip()
-        return cls(
-            url=_expand(url),
-            transport=str(data.get("transport", "tcp")),
-            input_args=_list(data.get("input_args")),
-        )
+    def from_toml(cls, data: Mapping[str, Any]) -> "InputConfig":
+        return cls(ffmpeg_argv=[_expand(arg) for arg in _list(data.get("ffmpeg_argv"))])
 
 
 @dataclass(frozen=True)
@@ -213,7 +206,7 @@ class SlackConfig:
 class AppConfig:
     base_dir: Path
     paths: PathsConfig
-    rtsp: RtspConfig
+    input: InputConfig
     hls: HlsConfig
     frames: FrameConfig
     ai: AiConfig
@@ -233,7 +226,7 @@ class AppConfig:
         return cls(
             base_dir=base_dir,
             paths=paths,
-            rtsp=RtspConfig.from_toml(_section(data, "rtsp")),
+            input=InputConfig.from_toml(_section(data, "input")),
             hls=HlsConfig.from_toml(_section(data, "hls"), frames, ai),
             frames=frames,
             ai=ai,
@@ -256,8 +249,12 @@ class AppConfig:
         return self.paths.source_hls_dir / self.hls.segment_pattern
 
     def validate_app(self) -> None:
-        if not self.rtsp.url or self.rtsp.url.startswith("rtsp://example"):
-            raise ValueError("[rtsp].url must be set to a real RTSP URL")
+        if not self.input.ffmpeg_argv:
+            raise ValueError("[input].ffmpeg_argv must include ffmpeg input arguments")
+        if "-i" not in self.input.ffmpeg_argv:
+            raise ValueError("[input].ffmpeg_argv must include an ffmpeg -i input")
+        if any(arg.startswith("rtsp://example") for arg in self.input.ffmpeg_argv):
+            raise ValueError("[input].ffmpeg_argv must be set to a real input URL")
         if self.frames.tc_seconds <= 0:
             raise ValueError("[frames].tc_seconds must be > 0")
         if self.frames.tb_seconds < 0:

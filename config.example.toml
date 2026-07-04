@@ -4,10 +4,8 @@ source_hls_dir = "source-hls"
 recordings_dir = "recordings"
 frame_storage_dir = "frames"
 
-[rtsp]
-url = "rtsp://example.local/stream"
-transport = "tcp"
-input_args = []
+[input]
+ffmpeg_argv = ["-rtsp_transport", "tcp", "-i", "rtsp://example.local/stream"]
 
 [hls]
 ffmpeg_bin = "ffmpeg"

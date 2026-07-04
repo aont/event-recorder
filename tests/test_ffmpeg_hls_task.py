@@ -9,7 +9,7 @@ from myrecorder.config import (
     HlsConfig,
     PathsConfig,
     RecordingConfig,
-    RtspConfig,
+    InputConfig,
     SlackConfig,
 )
 from myrecorder.ffmpeg_utils import FfmpegHlsTask, SegmentLogEvent, next_hls_start_number
@@ -23,7 +23,7 @@ def make_config(source_hls_dir):
             recordings_dir=source_hls_dir.parent / "recordings",
             frame_storage_dir=source_hls_dir.parent / "frames",
         ),
-        rtsp=RtspConfig(url="rtsp://camera.local/stream"),
+        input=InputConfig(ffmpeg_argv=["-i", "rtsp://camera.local/stream"]),
         hls=HlsConfig(restart_sleep_seconds=0),
         frames=FrameConfig(),
         ai=AiConfig(),
@@ -41,6 +41,31 @@ def test_next_hls_start_number_uses_next_existing_segment_number(tmp_path):
     (source_hls_dir / "live.m3u8").write_text("ignored playlist")
 
     assert next_hls_start_number(source_hls_dir, "segment_%010d.ts") == 12
+
+
+def test_ffmpeg_command_uses_configured_input_argv(tmp_path):
+    source_hls_dir = tmp_path / "source-hls"
+    source_hls_dir.mkdir()
+    config = make_config(source_hls_dir)
+    config = AppConfig(
+        base_dir=config.base_dir,
+        paths=config.paths,
+        input=InputConfig(ffmpeg_argv=["-f", "lavfi", "-i", "testsrc=size=1280x720:rate=30"]),
+        hls=config.hls,
+        frames=config.frames,
+        ai=config.ai,
+        recording=config.recording,
+        slack=config.slack,
+    )
+
+    cmd = FfmpegHlsTask(config, asyncio.Queue[SegmentLogEvent]()).command()
+
+    assert cmd[cmd.index("-f") : cmd.index("-map")] == [
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc=size=1280x720:rate=30",
+    ]
 
 
 def test_ffmpeg_command_appends_to_existing_hls_with_non_overlapping_start_number(tmp_path):

@@ -10,7 +10,7 @@ from myrecorder.config import (
     HlsConfig,
     PathsConfig,
     RecordingConfig,
-    RtspConfig,
+    InputConfig,
     SlackConfig,
 )
 from myrecorder.ffmpeg_utils import SegmentLogEvent
@@ -27,7 +27,7 @@ def make_config(base_dir: Path) -> AppConfig:
             recordings_dir=base_dir / "recordings",
             frame_storage_dir=base_dir / "frames",
         ),
-        rtsp=RtspConfig(url="rtsp://camera.local/stream"),
+        input=InputConfig(ffmpeg_argv=["-i", "rtsp://camera.local/stream"]),
         hls=HlsConfig(),
         frames=FrameConfig(),
         ai=AiConfig(),
