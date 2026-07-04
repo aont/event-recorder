@@ -118,7 +118,7 @@ target_objects = ["cat"]
 score_threshold = 0.4
 ```
 
-`[hls].retain_segments` is not configured in TOML. It is calculated from the fixed HLS segment duration, `[frames].tc_seconds`, `[frames].tb_seconds`, and `[ai].timeout_seconds` so enough source segments are kept for frame analysis and the post-detection recording window.
+`[hls].retain_segments` is not configured in TOML. It is calculated from the fixed HLS segment duration, `[frames].tc_seconds`, `[frames].ta_seconds`, `[frames].tb_seconds`, and `[ai].timeout_seconds` so enough source segments are kept for frame analysis and the pre-/post-detection recording window.
 
 For Slack upload, configure explicit values in the TOML file:
 
@@ -200,7 +200,13 @@ If detection exceeds `[ai].timeout_seconds`, the frame request is treated as fai
 
 ### AI trigger and recording
 
-If analysis returns `has_target = true`, `myrecorder` extends the active recording end time to:
+If analysis returns `has_target = true`, `myrecorder` starts a new capture from the retained source HLS segment timeline at:
+
+```text
+frame_timestamp - [frames].ta_seconds
+```
+
+and extends the active recording end time to:
 
 ```text
 frame_timestamp + [frames].tb_seconds
@@ -211,7 +217,7 @@ If there is no active capture loop, `myrecorder` starts one.
 The recording task:
 
 1. Creates a new timestamped directory under `[paths].recordings_dir`. By default, the timestamp uses the host process' local timezone and includes its numeric UTC offset.
-2. Hard-links current source segments into it. If hard-linking fails across filesystems, it falls back to `shutil.copy2` and logs a warning.
+2. Hard-links source segments that overlap the `[frames].ta_seconds` lookback window into it. If hard-linking fails across filesystems, it falls back to `shutil.copy2` and logs a warning.
 3. Copies the current m3u8 snapshot without `#EXT-X-ENDLIST`.
 4. Polls the source m3u8 and appends new segment entries to the destination m3u8.
 5. Ends the destination playlist with `#EXT-X-ENDLIST` after the copied segment timeline reaches the current end time.

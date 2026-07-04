@@ -54,9 +54,17 @@ def test_hls_retain_segments_is_calculated_from_runtime_settings() -> None:
 
     hls = HlsConfig.from_toml(
         {},
-        frames=FrameConfig(tc_seconds=1.0, tb_seconds=10.0),
+        frames=FrameConfig(tc_seconds=1.0, ta_seconds=10.0, tb_seconds=10.0),
         ai=AiConfig(timeout_seconds=20.0),
     )
 
     assert hls.segment_seconds == 2.0
-    assert hls.retain_segments == 27
+    assert hls.retain_segments == 32
+
+
+def test_frame_config_supports_ta_seconds_from_toml() -> None:
+    from myrecorder.config import FrameConfig
+
+    frames = FrameConfig.from_toml({"ta_seconds": 7.5})
+
+    assert frames.ta_seconds == 7.5

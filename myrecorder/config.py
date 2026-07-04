@@ -91,7 +91,8 @@ class HlsConfig:
             raise ValueError("[frames].tc_seconds must be > 0")
         frames_per_segment = max(1, math.ceil(segment_seconds / frames.tc_seconds))
         analysis_window_seconds = frames_per_segment * ai.timeout_seconds
-        retain_segments = max(1, math.ceil((analysis_window_seconds + frames.tb_seconds) / segment_seconds) + 2)
+        recording_window_seconds = frames.ta_seconds + frames.tb_seconds
+        retain_segments = max(1, math.ceil((analysis_window_seconds + recording_window_seconds) / segment_seconds) + 2)
         return cls(
             ffmpeg_bin=str(data.get("ffmpeg_bin", default.ffmpeg_bin)),
             retain_segments=retain_segments,
@@ -107,6 +108,7 @@ class HlsConfig:
 @dataclass(frozen=True)
 class FrameConfig:
     tc_seconds: float = 1.0
+    ta_seconds: float = 10.0
     tb_seconds: float = 10.0
     jpeg_quality: int = 3
     save_frames: bool = False
@@ -119,6 +121,7 @@ class FrameConfig:
         default = cls()
         return cls(
             tc_seconds=float(data.get("tc_seconds", default.tc_seconds)),
+            ta_seconds=float(data.get("ta_seconds", default.ta_seconds)),
             tb_seconds=float(data.get("tb_seconds", default.tb_seconds)),
             jpeg_quality=int(data.get("jpeg_quality", default.jpeg_quality)),
             save_frames=bool(data.get("save_frames", default.save_frames)),
@@ -257,6 +260,8 @@ class AppConfig:
             raise ValueError("[input].ffmpeg_argv must be set to a real input URL")
         if self.frames.tc_seconds <= 0:
             raise ValueError("[frames].tc_seconds must be > 0")
+        if self.frames.ta_seconds < 0:
+            raise ValueError("[frames].ta_seconds must be >= 0")
         if self.frames.tb_seconds < 0:
             raise ValueError("[frames].tb_seconds must be >= 0")
         if self.hls.retain_segments <= 0:

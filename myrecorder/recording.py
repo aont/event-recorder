@@ -66,6 +66,7 @@ class RecordingManager:
     def __init__(self, config: AppConfig) -> None:
         self.config = config
         self._lock = asyncio.Lock()
+        self._start_time: datetime | None = None
         self._end_time: datetime | None = None
         self._current_task: asyncio.Task[None] | None = None
         self._current_recording_id: int | None = None
@@ -75,8 +76,11 @@ class RecordingManager:
     async def on_target_detected(self, frame_timestamp: datetime, analysis: dict[str, Any]) -> None:
         if frame_timestamp.tzinfo is None:
             frame_timestamp = frame_timestamp.replace(tzinfo=timezone.utc)
+        requested_start = frame_timestamp - timedelta(seconds=self.config.frames.ta_seconds)
         requested_end = frame_timestamp + timedelta(seconds=self.config.frames.tb_seconds)
         async with self._lock:
+            if self._start_time is None or requested_start < self._start_time:
+                self._start_time = requested_start
             if self._end_time is None or requested_end > self._end_time:
                 self._end_time = requested_end
                 print(
@@ -90,7 +94,10 @@ class RecordingManager:
                 recording_id = self._next_recording_id
                 self._next_recording_id += 1
                 self._current_recording_id = recording_id
-                task = asyncio.create_task(self._run_recording(recording_id), name=f"recording-{recording_id}")
+                task = asyncio.create_task(
+                    self._run_recording(recording_id, self._start_time),
+                    name=f"recording-{recording_id}",
+                )
                 self._current_task = task
                 self._all_tasks.add(task)
                 task.add_done_callback(self._all_tasks.discard)
@@ -105,11 +112,12 @@ class RecordingManager:
             if self._current_recording_id == recording_id:
                 self._current_task = None
                 self._current_recording_id = None
+                self._start_time = None
                 self._end_time = None
                 print(f"{log_stamp()} recording: capture {recording_id} closed", file=sys.stderr, flush=True)
 
-    async def _run_recording(self, recording_id: int) -> None:
-        task = HlsRecordingTask(self.config, self, recording_id)
+    async def _run_recording(self, recording_id: int, start_time: datetime | None) -> None:
+        task = HlsRecordingTask(self.config, self, recording_id, start_time)
         try:
             await task.run()
         except asyncio.CancelledError:
@@ -127,10 +135,17 @@ class RecordingManager:
 
 
 class HlsRecordingTask:
-    def __init__(self, config: AppConfig, manager: RecordingManager, recording_id: int) -> None:
+    def __init__(
+        self,
+        config: AppConfig,
+        manager: RecordingManager,
+        recording_id: int,
+        start_time: datetime | None = None,
+    ) -> None:
         self.config = config
         self.manager = manager
         self.recording_id = recording_id
+        self.start_time = start_time
 
     async def run(self) -> None:
         playlist = await self._wait_for_source_playlist()
@@ -181,7 +196,8 @@ class HlsRecordingTask:
 
         copied_sequences: set[int] = set()
         last_end: datetime | None = None
-        for segment in playlist.segments:
+        initial_segments = self._initial_segments(playlist)
+        for segment in initial_segments:
             try:
                 self._copy_segment(segment, destination_dir)
                 copied_sequences.add(segment.sequence)
@@ -194,7 +210,7 @@ class HlsRecordingTask:
                     flush=True,
                 )
 
-        destination_playlist.write_text(strip_endlist(playlist.raw_text), encoding="utf-8")
+        destination_playlist.write_text(self._initial_playlist_text(playlist, initial_segments), encoding="utf-8")
         print(
             f"{log_stamp()} recording: copied initial playlist with {len(copied_sequences)} segments to {destination_dir}",
             file=sys.stderr,
@@ -214,6 +230,34 @@ class HlsRecordingTask:
             raise FileNotFoundError(src)
         dst = destination_dir / _segment_destination_relative_path(segment)
         _hardlink_or_copy(src, dst)
+
+    def _initial_segments(self, playlist: HlsPlaylist) -> list[HlsSegment]:
+        if self.start_time is None:
+            return list(playlist.segments)
+        return [
+            segment
+            for segment in playlist.segments
+            if segment.end_time is None or segment.end_time > self.start_time
+        ]
+
+    def _initial_playlist_text(self, playlist: HlsPlaylist, segments: list[HlsSegment]) -> str:
+        if len(segments) == len(playlist.segments):
+            return strip_endlist(playlist.raw_text)
+
+        header = playlist.header_without_endlist()
+        if segments:
+            first_sequence = segments[0].sequence
+            header = [
+                f"#EXT-X-MEDIA-SEQUENCE:{first_sequence}"
+                if line.startswith("#EXT-X-MEDIA-SEQUENCE:")
+                else line
+                for line in header
+            ]
+
+        lines = [*header]
+        for segment in segments:
+            lines.extend(segment.raw_entry_lines)
+        return "\n".join(lines).rstrip("\n") + "\n"
 
     async def _capture_loop(self, state: RecordingState) -> None:
         try:
@@ -315,4 +359,3 @@ class HlsRecordingTask:
         if rc != 0:
             raise RuntimeError(f"MP4 conversion failed with ffmpeg exit code {rc}")
         return output_path
-

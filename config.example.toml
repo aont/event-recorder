@@ -14,6 +14,8 @@ restart_sleep_seconds = 5.0
 [frames]
 # Tc: extract one frame every this many seconds from each segment.
 tc_seconds = 1.0
+# Ta: include this many seconds before the target detection frame timestamp.
+ta_seconds = 10.0
 # Tb: keep/extend recording until frame timestamp + this many seconds after a target detection.
 tb_seconds = 10.0
 jpeg_quality = 3
