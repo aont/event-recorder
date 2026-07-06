@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 
 from myrecorder.config import (
     AiConfig,
@@ -9,12 +11,12 @@ from myrecorder.config import (
     FrameConfig,
     HlsConfig,
     PathsConfig,
-    RecordingConfig,
     InputConfig,
+    RecordingConfig,
     SlackConfig,
 )
 from myrecorder.ffmpeg_utils import SegmentLogEvent
-from myrecorder.m3u8_loader import M3u8LoadingTask
+from myrecorder.m3u8_loader import ExtractedFrame, M3u8LoadingTask
 
 
 def make_config(base_dir: Path) -> AppConfig:
@@ -67,5 +69,75 @@ def test_m3u8_loader_waits_for_ffmpeg_segment_log_event_instead_of_polling(tmp_p
         finally:
             runner.cancel()
             await asyncio.gather(runner, return_exceptions=True)
+
+    asyncio.run(scenario())
+
+
+class FakeAiClient:
+    def __init__(self, analyses: list[dict[str, Any]]) -> None:
+        self.analyses = list(analyses)
+
+    async def analyze_frame(self, **kwargs: Any) -> dict[str, Any]:
+        return self.analyses.pop(0)
+
+
+class FakeRecordingManager:
+    def __init__(self) -> None:
+        self.detections = []
+
+    async def on_target_detected(self, frame_timestamp: datetime, analysis: dict[str, Any]) -> None:
+        self.detections.append((frame_timestamp, analysis))
+
+
+def make_frame(frame_id: str, timestamp: datetime) -> ExtractedFrame:
+    return ExtractedFrame(
+        frame_id=frame_id,
+        segment_sequence=1,
+        segment_uri="segment_0000000001.ts",
+        segment_duration=2.0,
+        offset_seconds=0.0,
+        timestamp=timestamp,
+        image_bytes=b"jpeg",
+    )
+
+
+def target_analysis(label: str = "cat") -> dict[str, Any]:
+    return {"ok": True, "has_target": True, "detections": [{"label": label, "score": 0.9, "bbox": {}}]}
+
+
+def test_single_detection_does_not_start_recording(tmp_path):
+    async def scenario() -> None:
+        recorder = FakeRecordingManager()
+        task = M3u8LoadingTask(
+            config=make_config(tmp_path),
+            segment_events=asyncio.Queue(),
+            ai_client=FakeAiClient([target_analysis()]),
+            recording_manager=recorder,
+        )
+
+        await task._analyze_frame(make_frame("frame-1", datetime(2026, 1, 1, tzinfo=timezone.utc)))
+
+        assert recorder.detections == []
+
+    asyncio.run(scenario())
+
+
+def test_consecutive_detections_for_same_label_start_recording(tmp_path):
+    async def scenario() -> None:
+        recorder = FakeRecordingManager()
+        task = M3u8LoadingTask(
+            config=make_config(tmp_path),
+            segment_events=asyncio.Queue(),
+            ai_client=FakeAiClient([target_analysis(), target_analysis()]),
+            recording_manager=recorder,
+        )
+        first = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        second = first + timedelta(seconds=1)
+
+        await task._analyze_frame(make_frame("frame-1", first))
+        await task._analyze_frame(make_frame("frame-2", second))
+
+        assert len(recorder.detections) == 1
+        assert recorder.detections[0][0] == second
 
     asyncio.run(scenario())

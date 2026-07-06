@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -44,6 +45,7 @@ class M3u8LoadingTask:
         self.recording_manager = recording_manager
         self.last_processed_sequence: int | None = None
         self.frames_by_segment: dict[int, list[ExtractedFrame]] = {}
+        self.positive_frame_history: dict[str, list[datetime]] = defaultdict(list)
 
     def _progress(self, message: str) -> None:
         if self.config.frames.echo_m3u8_progress_logs:
@@ -213,4 +215,30 @@ class M3u8LoadingTask:
                 file=sys.stderr,
                 flush=True,
             )
-            await self.recording_manager.on_target_detected(frame.timestamp, analysis)
+            if self._has_confirmed_target(frame.timestamp, analysis):
+                await self.recording_manager.on_target_detected(frame.timestamp, analysis)
+
+    def _has_confirmed_target(self, timestamp: datetime, analysis: dict[str, Any]) -> bool:
+        window_start = timestamp - timedelta(seconds=self.config.ai.confirmation_window_seconds)
+        confirmed = False
+        labels = {
+            str(detection.get("label"))
+            for detection in analysis.get("detections") or []
+            if detection.get("label")
+        }
+        for label in labels:
+            history = [seen_at for seen_at in self.positive_frame_history[label] if seen_at >= window_start]
+            history.append(timestamp)
+            self.positive_frame_history[label] = history
+            if len(history) >= self.config.ai.min_confirming_frames:
+                confirmed = True
+
+        # Keep unrelated labels bounded even if they are not present in this frame.
+        for label in list(self.positive_frame_history):
+            self.positive_frame_history[label] = [
+                seen_at for seen_at in self.positive_frame_history[label] if seen_at >= window_start
+            ]
+            if not self.positive_frame_history[label]:
+                del self.positive_frame_history[label]
+
+        return confirmed

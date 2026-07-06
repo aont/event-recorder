@@ -142,6 +142,8 @@ class AiConfig:
     score_threshold: float = 0.4
     timeout_seconds: float = 20.0
     max_results: int = -1
+    min_confirming_frames: int = 2
+    confirmation_window_seconds: float = 3.0
 
     @classmethod
     def from_toml(cls, data: Mapping[str, Any], base_dir: Path) -> "AiConfig":
@@ -154,6 +156,10 @@ class AiConfig:
             score_threshold=float(data.get("score_threshold", default.score_threshold)),
             timeout_seconds=float(data.get("timeout_seconds", default.timeout_seconds)),
             max_results=int(data.get("max_results", default.max_results)),
+            min_confirming_frames=int(data.get("min_confirming_frames", default.min_confirming_frames)),
+            confirmation_window_seconds=float(
+                data.get("confirmation_window_seconds", default.confirmation_window_seconds)
+            ),
         )
 
 
@@ -270,3 +276,7 @@ class AppConfig:
             raise ValueError("[hls].restart_sleep_seconds must be >= 0")
         if not self.ai.server_url:
             raise ValueError("[ai].server_url must not be empty")
+        if self.ai.min_confirming_frames <= 0:
+            raise ValueError("[ai].min_confirming_frames must be > 0")
+        if self.ai.confirmation_window_seconds <= 0:
+            raise ValueError("[ai].confirmation_window_seconds must be > 0")

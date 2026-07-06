@@ -116,6 +116,10 @@ server_url = "http://127.0.0.1:8080"
 # unix_socket_path = "/tmp/detection-server.sock"
 target_objects = ["cat"]
 score_threshold = 0.4
+# Require the same label in at least this many frames before recording.
+min_confirming_frames = 2
+# Those detections must occur within this many seconds.
+confirmation_window_seconds = 3.0
 ```
 
 `[hls].retain_segments` is not configured in TOML. It is calculated from the fixed HLS segment duration, `[frames].tc_seconds`, `[frames].ta_seconds`, `[frames].tb_seconds`, and `[ai].timeout_seconds` so enough source segments are kept for frame analysis and the pre-/post-detection recording window.
@@ -200,7 +204,7 @@ If detection exceeds `[ai].timeout_seconds`, the frame request is treated as fai
 
 ### AI trigger and recording
 
-If analysis returns `has_target = true`, `myrecorder` starts a new capture from the retained source HLS segment timeline at:
+If analysis returns `has_target = true`, `myrecorder` first records positive-frame history by detection label. A recording starts only after the same label appears in at least `[ai].min_confirming_frames` frames within `[ai].confirmation_window_seconds`; this suppresses one-off false positives. After that confirmation, `myrecorder` starts a new capture from the retained source HLS segment timeline at:
 
 ```text
 frame_timestamp - [frames].ta_seconds

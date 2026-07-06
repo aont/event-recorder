@@ -29,6 +29,10 @@ server_url = "http://127.0.0.1:8080"
 target_objects = ["cat"]
 score_threshold = 0.4
 timeout_seconds = 20.0
+# Require the same label in this many frames before starting or extending recording.
+min_confirming_frames = 2
+# Positive detections for a label must fall within this many seconds to confirm.
+confirmation_window_seconds = 3.0
 max_results = -1
 
 [slack]
