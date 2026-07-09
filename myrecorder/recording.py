@@ -278,19 +278,22 @@ class HlsRecordingTask:
             raise
 
     def _copy_and_append_new_segments(self, state: RecordingState, playlist: HlsPlaylist) -> None:
-        new_segments = [segment for segment in playlist.segments if segment.sequence not in state.copied_sequences]
-        if not new_segments:
-            return
-
         if state.copied_sequences:
             expected_next = max(state.copied_sequences) + 1
-            if new_segments[0].sequence > expected_next:
+            new_segments = [segment for segment in playlist.segments if segment.sequence >= expected_next]
+
+            if new_segments and new_segments[0].sequence > expected_next:
                 print(
                     f"{log_stamp()} recording: warning: source playlist skipped from seq {expected_next} "
                     f"to {new_segments[0].sequence}; retention may be too small",
                     file=sys.stderr,
                     flush=True,
                 )
+        else:
+            new_segments = list(playlist.segments)
+
+        if not new_segments:
+            return
 
         append_batch: list[str] = []
         appended_count = 0
