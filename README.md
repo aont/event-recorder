@@ -155,6 +155,44 @@ After optional `pip install .`, the console script is also available:
 myrecorder --config config.toml
 ```
 
+### Using tmpfs for temporary files
+
+Since this tool continuously writes HLS segments and extracted frames, consider placing the working directory on `tmpfs`. This keeps temporary I/O in RAM instead of writing constantly to an SSD, which can significantly reduce SSD wear. Recordings and converted MP4 files can still be written to persistent storage if configured separately.
+
+Example wrapper:
+
+```bash
+#!/bin/bash
+
+set -exuo pipefail
+
+MOUNT_POINT="$PWD/tmp"
+
+if ! findmnt -n -o FSTYPE --target "$MOUNT_POINT" | grep -qx "tmpfs"; then
+    echo "$MOUNT_POINT is not mounted as tmpfs. Mounting..."
+
+    mkdir -p "$MOUNT_POINT"
+    mount -t tmpfs -o defaults tmpfs "$MOUNT_POINT"
+
+    echo "Mounted $MOUNT_POINT as tmpfs."
+else
+    echo "$MOUNT_POINT is already mounted as tmpfs."
+fi
+
+exec myrecorder --config config.toml
+```
+
+Point the temporary directories in `config.toml` at the mounted directory, for example:
+
+```toml
+[paths]
+source_hls_dir = "tmp/source-hls"
+frame_storage_dir = "tmp/frames"
+recordings_dir = "recordings"
+```
+
+This keeps the frequently rewritten HLS segments and frame images in memory while leaving finished recordings on persistent storage.
+
 ## Behavior
 
 ### ffmpeg HLS generation
